@@ -1,0 +1,318 @@
+import { describe, expect, it, vi } from 'vitest';
+import { TerminalContext } from '../../src/worker/agent/terminal-context';
+import { ToolExecutor } from '../../src/worker/agent/tool-executor';
+
+// =====================================================================
+// tool-executor.test.ts
+// ---------------------------------------------------------------
+// Agent 工具层的输出有界化回归：
+//   1. docker_manage(logs) 必须是有界查看 —— 拒绝无限流式 -f/--follow，
+//      未显式指定 --tail 时强制追加 --tail 200。
+//   2. 所有 exec 类工具结果在进入 LLM 上下文前做 head/tail 截断，
+//      防止大输出把后续每轮 LLM 请求体撑爆（弱网环境下的核心诱因）。
+// =====================================================================
+
+function makeExecutor(execResult: {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}) {
+  const execCommand = vi.fn(
+    async (command: string): Promise<typeof execResult> => execResult
+  );
+  const askConfirmation = vi.fn(async () => true);
+  const executor = new ToolExecutor(
+    new TerminalContext(),
+    execCommand,
+    askConfirmation,
+    undefined
+  );
+  return { executor, execCommand, askConfirmation };
+}
+
+describe('确认取消与监听器清理', () => {
+  it('确认成功后移除 abort 监听器，并向确认拥有者传递 signal', async () => {
+    const { executor, askConfirmation } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    await executor.execute('execute_command', { command: 'rm file' }, controller.signal);
+    expect(askConfirmation).toHaveBeenCalledWith('rm file', expect.any(String), controller.signal);
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  it('等待期间取消不执行任何 SSH 命令，且不保留监听器', async () => {
+    const { executor, askConfirmation, execCommand } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    askConfirmation.mockImplementation(() => new Promise<boolean>(() => {}));
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    const run = executor.execute('execute_command', { command: 'rm file' }, controller.signal);
+    await Promise.resolve();
+    controller.abort();
+    expect(JSON.parse(await run).status).toBe('cancelled');
+    expect(execCommand).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+});
+
+describe('动态命令确认 — 实测绕过不再直接执行', () => {
+  it.each(['eval "rm -rf /"', 'base64 -d|sh', 'rm${IFS}-rf${IFS}/'])(
+    '拒绝确认后不派发命令：%s', async (command) => {
+      const { executor, execCommand, askConfirmation } = makeExecutor({
+        stdout: '', stderr: '', exitCode: 0,
+      });
+      askConfirmation.mockResolvedValue(false);
+      const result = JSON.parse(await executor.execute('execute_command', { command }));
+      expect(askConfirmation).toHaveBeenCalledOnce();
+      expect(execCommand).not.toHaveBeenCalled();
+      expect(result.user_rejected).toBe(true);
+    }
+  );
+
+  it('直接 rm -rf / 仍阻断，不降级为可确认执行', async () => {
+    const { executor, execCommand, askConfirmation } = makeExecutor({
+      stdout: '', stderr: '', exitCode: 0,
+    });
+    const result = JSON.parse(await executor.execute('execute_command', { command: 'rm -rf /' }));
+    expect(result.blocked).toBe(true);
+    expect(execCommand).not.toHaveBeenCalled();
+    expect(askConfirmation).not.toHaveBeenCalled();
+  });
+});
+
+describe('docker_manage(logs) — 日志查看必须是有界的', () => {
+  it('未指定 --tail 时强制追加 --tail 200', async () => {
+    const { executor, execCommand } = makeExecutor({ stdout: 'ok', stderr: '', exitCode: 0 });
+    const result = await executor.execute(
+      'docker_manage',
+      { action: 'logs', target: 'blog-backend' },
+      undefined
+    );
+    expect(execCommand).toHaveBeenCalledOnce();
+    expect(execCommand.mock.calls[0][0]).toBe('docker logs --tail 200 blog-backend');
+    expect(JSON.parse(result).exit_code).toBe(0);
+  });
+
+  it('带其它选项（如 --since）时同样补齐 --tail', async () => {
+    const { executor, execCommand } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    await executor.execute(
+      'docker_manage',
+      { action: 'logs', target: 'blog-backend', options: '--since 24h' },
+      undefined
+    );
+    expect(execCommand.mock.calls[0][0]).toBe('docker logs --since 24h --tail 200 blog-backend');
+  });
+
+  it('已显式携带 --tail 时不重复追加', async () => {
+    const { executor, execCommand } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    await executor.execute(
+      'docker_manage',
+      { action: 'logs', target: 'blog-backend', options: '--tail 500' },
+      undefined
+    );
+    expect(execCommand.mock.calls[0][0]).toBe('docker logs --tail 500 blog-backend');
+  });
+
+  it('拒绝无限流式 -f / --follow：不执行任何命令并返回明确错误', async () => {
+    for (const options of ['-f', '--follow', '-f --tail 10', '--tail 10 --follow']) {
+      const { executor, execCommand } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+      const result = await executor.execute(
+        'docker_manage',
+        { action: 'logs', target: 'blog-backend', options },
+        undefined
+      );
+      expect(execCommand).not.toHaveBeenCalled();
+      const parsed = JSON.parse(result);
+      expect(parsed.blocked).toBe(true);
+      expect(parsed.stderr).toContain('不允许');
+    }
+  });
+
+  it('含 shell 元字符的 options 会被净化后照常强制 --tail', async () => {
+    const { executor, execCommand } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    await executor.execute(
+      'docker_manage',
+      { action: 'logs', target: 'blog-backend', options: '--tail 5; rm -rf /' },
+      undefined
+    );
+    expect(execCommand.mock.calls[0][0]).toBe('docker logs --tail 200 blog-backend');
+  });
+});
+
+describe('工具结果进 LLM 前截断 — token budgeting', () => {
+  it('小输出原样返回，不带截断标记', async () => {
+    const { executor } = makeExecutor({ stdout: 'short output', stderr: '', exitCode: 0 });
+    const result = await executor.execute(
+      'execute_command',
+      { command: 'echo short', timeout_ms: 5000 },
+      undefined
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed.stdout).toBe('short output');
+    expect(parsed.truncated).toBeUndefined();
+    expect(parsed.exit_code).toBe(0);
+  });
+
+  it('大输出（200KB）截断到 64K 字符预算内，保留头尾并附省略计数', async () => {
+    const big = 'x'.repeat(200 * 1024);
+    const { executor } = makeExecutor({ stdout: big, stderr: '', exitCode: 0 });
+    const result = await executor.execute(
+      'execute_command',
+      { command: 'cat big.log', timeout_ms: 5000 },
+      undefined
+    );
+    const parsed = JSON.parse(result);
+    expect(parsed.truncated).toBe(true);
+    expect(parsed.omitted_chars).toBeGreaterThan(0);
+    // 头部与尾部内容都保留
+    expect(parsed.stdout.startsWith('xxx')).toBe(true);
+    expect(parsed.stdout.endsWith('xxx')).toBe(true);
+    expect(parsed.stdout).toContain('输出过长已截断');
+    // 总长度受控（64K 预算 + 截断说明）
+    expect(parsed.stdout.length).toBeLessThan(70_000);
+  });
+});
+
+describe('fetch_web_content — 安全只读网页读取与清洗', () => {
+  function mockWebFetch(handler: (url: string) => Response) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const urlStr = String(input);
+      if (urlStr.includes('1.1.1.1') || urlStr.includes('dns-query')) {
+        return new Response(
+          JSON.stringify({
+            Status: 0,
+            Answer: [{ type: 1, data: '93.184.216.34' }],
+          }),
+          { headers: { 'Content-Type': 'application/dns-json' } }
+        );
+      }
+      return handler(urlStr);
+    });
+  }
+
+  it('SSRF 防御：拦截 localhost、内网与元数据地址', async () => {
+    const { executor } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    const blockedUrls = [
+      'http://localhost/admin',
+      'http://127.0.0.1:8080',
+      'http://192.168.1.1/router',
+      'http://169.254.169.254/latest/meta-data',
+      'ftp://example.com/file',
+    ];
+
+    for (const url of blockedUrls) {
+      const raw = await executor.execute('fetch_web_content', { url });
+      const parsed = JSON.parse(raw);
+      expect(parsed.blocked).toBe(true);
+      expect(parsed.status).toBe('blocked');
+    }
+  });
+
+  it('成功读取 HTML 并剥离 script/style/标签，解码实体字符', async () => {
+    const { executor } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Model Hub</title>
+          <style>body { color: red; }</style>
+          <script>console.log("secret");</script>
+        </head>
+        <body>
+          <h1>Minimax-H3 模型</h1>
+          <p>量化版本：&quot;GPTQ-Int4&quot; &amp; &lt;AWQ&gt;</p>
+          <div>显存需求：16GB</div>
+        </body>
+      </html>
+    `;
+    mockWebFetch(() =>
+      new Response(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      })
+    );
+
+    const raw = await executor.execute('fetch_web_content', {
+      url: 'https://example.com/models/minimax-h3',
+    });
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('succeeded');
+    expect(parsed.content).toContain('Minimax-H3 模型');
+    expect(parsed.content).toContain('量化版本："GPTQ-Int4" & <AWQ>');
+    expect(parsed.content).toContain('显存需求：16GB');
+    expect(parsed.content).not.toContain('console.log');
+    expect(parsed.content).not.toContain('color: red');
+  });
+
+  it('JSON 响应格式化返回', async () => {
+    const { executor } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    const data = { model: 'MiniMax-H3', quantization: ['int4', 'int8'], context_length: 32768 };
+    mockWebFetch(() =>
+      new Response(JSON.stringify(data), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const raw = await executor.execute('fetch_web_content', {
+      url: 'https://example.com/api/model-info',
+    });
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('succeeded');
+    expect(parsed.content).toContain('"MiniMax-H3"');
+    expect(parsed.content).toContain('32768');
+  });
+
+  it('重定向防护：安全重定向正常跟随，重定向至内网被拦截', async () => {
+    const { executor } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+
+    mockWebFetch(url => {
+      if (url.includes('redirect-to-internal')) {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: 'http://127.0.0.1:8080/internal' },
+        });
+      }
+      return new Response('internal page');
+    });
+
+    const raw = await executor.execute('fetch_web_content', {
+      url: 'https://example.com/redirect-to-internal',
+    });
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('blocked');
+    expect(parsed.blocked).toBe(true);
+  });
+
+  it('拒绝二进制内容', async () => {
+    const { executor } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    mockWebFetch(() =>
+      new Response('binary data', {
+        headers: { 'Content-Type': 'application/octet-stream' },
+      })
+    );
+
+    const raw = await executor.execute('fetch_web_content', {
+      url: 'https://example.com/model.tar.gz',
+    });
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('failed');
+    expect(parsed.error).toContain('不支持读取二进制内容');
+  });
+
+  it('超长网页内容安全截断至 16,000 字符内', async () => {
+    const { executor } = makeExecutor({ stdout: '', stderr: '', exitCode: 0 });
+    const hugeHtml = `<p>${'A'.repeat(30_000)}</p>`;
+    mockWebFetch(() =>
+      new Response(hugeHtml, {
+        headers: { 'Content-Type': 'text/html' },
+      })
+    );
+
+    const raw = await executor.execute('fetch_web_content', {
+      url: 'https://example.com/huge-doc',
+    });
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('succeeded');
+    expect(parsed.truncated).toBe(true);
+    expect(parsed.content).toContain('内容过长已截断');
+    expect(parsed.content.length).toBeLessThan(17_000);
+  });
+});

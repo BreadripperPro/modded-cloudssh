@@ -1,0 +1,659 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { inferLocationHintMock } = vi.hoisted(() => ({
+  inferLocationHintMock: vi.fn(),
+}));
+
+vi.mock('../../src/worker/ip-geo', () => ({
+  inferLocationHint: inferLocationHintMock,
+}));
+
+import { UserDBDO } from '../../src/worker/user-db';
+
+class FakeSql {
+  statements: Array<{ query: string; values: unknown[] }> = [];
+  storedTags = '["production","apac"]';
+
+  constructor(private readonly serverOverrides: Record<string, unknown> = {}) {}
+
+  exec(query: string, ...values: unknown[]): { toArray: () => unknown[] } {
+    this.statements.push({ query, values });
+
+    if (query.includes('PRAGMA table_info(servers)')) {
+      return {
+        toArray: () => [{ name: 'region' }, { name: 'inferred_hint' }],
+      };
+    }
+    if (query.includes('SELECT user_id FROM servers WHERE id')) {
+      return { toArray: () => [{ user_id: 7 }] };
+    }
+    if (query === 'SELECT user_id, jump_server_id FROM servers WHERE id = ?') {
+      return { toArray: () => [{ user_id: 7, jump_server_id: null }] };
+    }
+    if (query.startsWith('UPDATE servers SET')) {
+      const tagsIndex = query.split(', ').findIndex((part) => part.includes('tags = ?'));
+      if (tagsIndex >= 0) this.storedTags = String(values[tagsIndex]);
+      return { toArray: () => [] };
+    }
+    if (query.includes('FROM servers WHERE user_id = ?')) {
+      return { toArray: () => [this.serverRow()] };
+    }
+    if (query.includes('FROM servers WHERE id = ?')) {
+      return { toArray: () => [this.serverRow()] };
+    }
+    return { toArray: () => [] };
+  }
+
+  private serverRow(): Record<string, unknown> {
+    return {
+      id: 1,
+      user_id: 7,
+      name: 'Production',
+      host: 'prod.example.com',
+      port: 22,
+      username: 'deploy',
+      auth_method: 'publickey',
+      region: null,
+      inferred_hint: 'apac',
+      tags: this.storedTags,
+      os: 'ubuntu',
+      created_at: '',
+      updated_at: '',
+      jump_server_id: null,
+      ...this.serverOverrides,
+    };
+  }
+}
+
+function createUserDB(sql: FakeSql): UserDBDO {
+  return new UserDBDO(
+    { storage: { sql } } as unknown as DurableObjectState,
+    { DEBUG_MODE: 'false' } as never
+  );
+}
+
+describe('UserDB server tags', () => {
+  beforeEach(() => {
+    inferLocationHintMock.mockReset();
+    inferLocationHintMock.mockResolvedValue({ hint: 'apac', debug: [] });
+  });
+
+  it('adds the tags column idempotently and returns parsed tag arrays', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    expect(
+      sql.statements.some(({ query }) =>
+        query.includes("ALTER TABLE servers ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
+      )
+    ).toBe(true);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers?user_id=7')
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([
+      expect.objectContaining({ tags: ['production', 'apac'] }),
+    ]);
+  });
+
+  it('adds last_connected_at column idempotently and queries it in server list', async () => {
+    const sql = new FakeSql({ last_connected_at: 1700000000000 });
+    const database = createUserDB(sql);
+
+    expect(
+      sql.statements.some(({ query }) =>
+        query.includes('ALTER TABLE servers ADD COLUMN last_connected_at INTEGER DEFAULT NULL')
+      )
+    ).toBe(true);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers?user_id=7')
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([
+      expect.objectContaining({ last_connected_at: 1700000000000 }),
+    ]);
+  });
+
+  it('normalizes tags before updating SQLite', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 7,
+          tags: [' Production ', 'production', 'database'],
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ tags: ['Production', 'database'] })
+    );
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query.startsWith('UPDATE servers SET tags = ?') &&
+          values[0] === '["Production","database"]'
+      )
+    ).toBe(true);
+  });
+
+  it('切换认证方式时拒绝沿用旧认证方式的凭据', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 7,
+          auth_method: 'password',
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: '切换认证方式时必须同时提供对应凭据',
+    });
+    expect(sql.statements.some(({ query }) => query.startsWith('UPDATE servers SET'))).toBe(false);
+  });
+
+  it.each(['password', 'publickey'])('认证方式 %s 不变时省略 credential 保留原凭据', async (auth_method) => {
+    const sql = new FakeSql({ auth_method });
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 7,
+          name: 'Production SSH',
+          auth_method,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      sql.statements.some(({ query }) =>
+        query.startsWith('UPDATE servers SET name = ?, auth_method = ?')
+      )
+    ).toBe(true);
+  });
+
+  it.each([undefined, '', 'discard-this-secret'])('新增 none 服务器不保存凭据（%s）', async (credential) => {
+    const sql = new FakeSql({ auth_method: 'none' });
+    const database = createUserDB(sql);
+    const encrypt = vi.spyOn(database as any, 'encryptCredential');
+    const response = await database.fetch(new Request('http://internal/internal/servers', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: 7, name: 'None', host: 'ssh.example.com', port: 22,
+        username: 'access-token-user', auth_method: 'none', credential, region: 'weur' }),
+    }));
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({ auth_method: 'none' });
+    const insert = sql.statements.find(({ query }) => query.startsWith('INSERT INTO servers'))!;
+    expect(insert.values[5]).toBe('');
+    expect(insert.values[6]).toBe('none');
+    expect(encrypt).not.toHaveBeenCalled();
+  });
+
+  it.each(['password', 'publickey', 'none'])('切换/保持 none 时清空旧凭据（原方式 %s）', async (auth_method) => {
+    const sql = new FakeSql({ auth_method });
+    const database = createUserDB(sql);
+    const encrypt = vi.spyOn(database as any, 'encryptCredential');
+    const response = await database.fetch(new Request('http://internal/internal/servers/1', {
+      method: 'PUT',
+      body: JSON.stringify({ user_id: 7, auth_method: 'none', credential: 'discard-this-secret' }),
+    }));
+    expect(response.status).toBe(200);
+    const update = sql.statements.find(({ query }) => query.startsWith('UPDATE servers SET'))!;
+    expect(update.query).toContain('credential = ?, auth_method = ?');
+    expect(update.values.slice(0, 2)).toEqual(['', 'none']);
+    expect(encrypt).not.toHaveBeenCalled();
+  });
+
+  it.each(['password', 'publickey'])('none 切回 %s 必须显式提供对应凭据', async (auth_method) => {
+    const sql = new FakeSql({ auth_method: 'none' });
+    const database = createUserDB(sql);
+    const encrypt = vi.spyOn(database as any, 'encryptCredential').mockResolvedValue('encrypted-fresh');
+    for (const credential of auth_method === 'password' ? [undefined] : [undefined, '']) {
+      const rejected = await database.fetch(new Request('http://internal/internal/servers/1', {
+        method: 'PUT', body: JSON.stringify({ user_id: 7, auth_method, credential }),
+      }));
+      expect(rejected.status).toBe(400);
+    }
+    expect(sql.statements.some(({ query }) => query.startsWith('UPDATE servers SET'))).toBe(false);
+    const accepted = await database.fetch(new Request('http://internal/internal/servers/1', {
+      method: 'PUT', body: JSON.stringify({ user_id: 7, auth_method, credential: 'fresh-secret' }),
+    }));
+    expect(accepted.status).toBe(200);
+    expect(encrypt).toHaveBeenCalledWith('fresh-secret', 7);
+    const update = sql.statements.find(({ query }) => query.startsWith('UPDATE servers SET'))!;
+    expect(update.values.slice(0, 2)).toEqual(['encrypted-fresh', auth_method]);
+  });
+
+  it.each(['password', 'publickey'])('新增 %s 拒绝缺失/非法凭据，私钥仍不可为空', async (auth_method) => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+    for (const credential of auth_method === 'password' ? [undefined, null, false, 123] : [undefined, '']) {
+      const response = await database.fetch(new Request('http://internal/internal/servers', {
+        method: 'POST', body: JSON.stringify({ user_id: 7, auth_method, credential }),
+      }));
+      expect(response.status).toBe(400);
+    }
+    expect(sql.statements.some(({ query }) => query.startsWith('INSERT INTO servers'))).toBe(false);
+  });
+
+  it('新增 password 服务器允许空密码并加密保存', async () => {
+    const sql = new FakeSql({ auth_method: 'password' });
+    const database = createUserDB(sql);
+    const encrypt = vi.spyOn(database as any, 'encryptCredential').mockResolvedValue('encrypted-empty');
+    const response = await database.fetch(new Request('http://internal/internal/servers', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: 7, name: 'Empty password', host: 'ssh.example.com',
+        port: 22, username: 'alice', auth_method: 'password', credential: '', region: 'weur' }),
+    }));
+    expect(response.status).toBe(201);
+    expect(encrypt).toHaveBeenCalledWith('', 7);
+    const insert = sql.statements.find(({ query }) => query.startsWith('INSERT INTO servers'))!;
+    expect(insert.values.slice(5, 7)).toEqual(['encrypted-empty', 'password']);
+  });
+
+  it.each(['none', 'publickey', 'password'])('从 %s 显式设置空密码不会保留旧凭据', async (auth_method) => {
+    const sql = new FakeSql({ auth_method });
+    const database = createUserDB(sql);
+    const encrypt = vi.spyOn(database as any, 'encryptCredential').mockResolvedValue('encrypted-empty');
+    const response = await database.fetch(new Request('http://internal/internal/servers/1', {
+      method: 'PUT', body: JSON.stringify({ user_id: 7, auth_method: 'password', credential: '' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(encrypt).toHaveBeenCalledWith('', 7);
+    const update = sql.statements.find(({ query }) => query.startsWith('UPDATE servers SET'))!;
+    expect(update.values.slice(0, 2)).toEqual(['encrypted-empty', 'password']);
+  });
+
+  it('空密码 AES-GCM 加密/解密往返不丢失零长度内容', async () => {
+    const database = createUserDB(new FakeSql());
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    vi.spyOn(database as any, 'deriveEncryptionKey').mockResolvedValue(key);
+    const encrypted = await (database as any).encryptCredential('', 7);
+    expect(atob(encrypted).length).toBe(28); // 12-byte IV + 16-byte GCM tag
+    await expect((database as any).decryptCredential(encrypted, 7)).resolves.toBe('');
+  });
+
+  it('手动指定区域时保存服务器不会查询 IPinfo', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 7,
+          name: 'Production',
+          host: 'prod.example.com',
+          port: 22,
+          username: 'deploy',
+          credential: 'secret',
+          auth_method: 'password',
+          region: 'weur',
+        }),
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(inferLocationHintMock).not.toHaveBeenCalled();
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query.startsWith('INSERT INTO servers') && values[7] === 'weur' && values[8] === null
+      )
+    ).toBe(true);
+  });
+
+  it('新增跳板链下游服务器时跳过区域推断并清空自身区域', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 7,
+          name: 'Private target',
+          host: '10.0.0.8',
+          port: 22,
+          username: 'deploy',
+          credential: 'secret',
+          auth_method: 'password',
+          region: 'weur',
+          jump_server_id: 2,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(inferLocationHintMock).not.toHaveBeenCalled();
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query.startsWith('INSERT INTO servers') &&
+          values[7] === null &&
+          values[8] === null &&
+          values[10] === 2
+      )
+    ).toBe(true);
+  });
+
+  it('编辑跳板链下游服务器时不推断区域并清理历史提示', async () => {
+    const sql = new FakeSql({
+      host: '10.0.0.8',
+      region: 'weur',
+      inferred_hint: 'apac',
+      jump_server_id: 2,
+    });
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 7, host: '10.0.0.9' }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(inferLocationHintMock).not.toHaveBeenCalled();
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query.startsWith('UPDATE servers SET host = ?, inferred_hint = ?') &&
+          query.includes('region = ?') &&
+          values[0] === '10.0.0.9' &&
+          values[1] === null &&
+          values[2] === null
+      )
+    ).toBe(true);
+  });
+
+  it('从直连切换为跳板连接时不推断并清理区域信息', async () => {
+    const sql = new FakeSql({ region: 'weur', inferred_hint: 'apac', jump_server_id: null });
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 7, jump_server_id: 2 }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(inferLocationHintMock).not.toHaveBeenCalled();
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query.startsWith(
+            'UPDATE servers SET inferred_hint = ?, region = ?, jump_server_id = ?'
+          ) &&
+          values[0] === null &&
+          values[1] === null &&
+          values[2] === 2
+      )
+    ).toBe(true);
+  });
+
+  it('从跳板连接切回自动直连时只推断一次当前入口', async () => {
+    const sql = new FakeSql({
+      host: 'entry.example.com',
+      region: null,
+      inferred_hint: null,
+      jump_server_id: 2,
+    });
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 7, jump_server_id: null, region: '' }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(inferLocationHintMock).toHaveBeenCalledTimes(1);
+    expect(inferLocationHintMock).toHaveBeenCalledWith('entry.example.com');
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query.startsWith(
+            'UPDATE servers SET inferred_hint = ?, region = ?, jump_server_id = ?'
+          ) &&
+          values[0] === 'apac' &&
+          values[1] === null &&
+          values[2] === null
+      )
+    ).toBe(true);
+  });
+
+  it('从跳板连接切回手动直连时不查询 IPinfo', async () => {
+    const sql = new FakeSql({ jump_server_id: 2, region: null, inferred_hint: null });
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 7, jump_server_id: null, region: 'weur' }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(inferLocationHintMock).not.toHaveBeenCalled();
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query.startsWith(
+            'UPDATE servers SET inferred_hint = ?, region = ?, jump_server_id = ?'
+          ) &&
+          values[0] === null &&
+          values[1] === 'weur' &&
+          values[2] === null
+      )
+    ).toBe(true);
+  });
+
+  it('新增服务器时严格拒绝范围外或非整数端口', async () => {
+    for (const port of [0, 65536, 22.5]) {
+      const sql = new FakeSql();
+      const database = createUserDB(sql);
+      const response = await database.fetch(
+        new Request('http://internal/internal/servers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: 7,
+            name: 'Production',
+            host: 'prod.example.com',
+            port,
+            username: 'deploy',
+            credential: 'secret',
+            auth_method: 'password',
+          }),
+        })
+      );
+
+      expect(response.status).toBe(400);
+      expect(sql.statements.some(({ query }) => query.startsWith('INSERT INTO servers'))).toBe(
+        false
+      );
+    }
+    expect(inferLocationHintMock).not.toHaveBeenCalled();
+  });
+
+  it('主机和自动区域均未变化时编辑服务器不会重复查询 IPinfo', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 7,
+          name: 'Production SSH',
+          host: 'prod.example.com',
+          region: '',
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(inferLocationHintMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('UserDB server OS detection', () => {
+  beforeEach(() => {
+    inferLocationHintMock.mockReset();
+    inferLocationHintMock.mockResolvedValue({ hint: 'apac', debug: [] });
+  });
+
+  it('幂等地为 servers 表添加 os 列', () => {
+    const sql = new FakeSql();
+    createUserDB(sql);
+
+    expect(
+      sql.statements.some(({ query }) =>
+        query.includes('ALTER TABLE servers ADD COLUMN os TEXT DEFAULT NULL')
+      )
+    ).toBe(true);
+  });
+
+  it('PUT /internal/servers/:id/os 更新操作系统', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1/os', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 7, os: 'ubuntu' }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ success: true });
+    expect(
+      sql.statements.some(
+        ({ query, values }) =>
+          query === 'UPDATE servers SET os = ? WHERE id = ?' && values[0] === 'ubuntu'
+      )
+    ).toBe(true);
+  });
+
+  it('后台更新操作系统不改变服务器 updated_at 和列表排序', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    await database.fetch(
+      new Request('http://internal/internal/servers/1/os', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 7, os: 'debian' }),
+      })
+    );
+
+    const update = sql.statements.find(({ query }) => query.startsWith('UPDATE servers SET os'));
+    expect(update?.query).not.toContain('updated_at');
+  });
+
+  it('PUT /internal/servers/:id/os 越权返回 403', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers/1/os', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 999, os: 'ubuntu' }),
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(sql.statements.some(({ query }) => query.startsWith('UPDATE servers SET os'))).toBe(
+      false
+    );
+  });
+
+  it('PUT /internal/servers/:id/os 拒绝 unknown 和非规范 os 值', async () => {
+    for (const os of ['', 'unknown', 'Ubuntu', 'a'.repeat(33)]) {
+      const sql = new FakeSql();
+      const database = createUserDB(sql);
+
+      const response = await database.fetch(
+        new Request('http://internal/internal/servers/1/os', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: 7, os }),
+        })
+      );
+
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it('修改主机地址或端口时清空旧 os，普通编辑时保留', async () => {
+    for (const update of [{ host: 'new.example.com' }, { port: 2222 }]) {
+      const sql = new FakeSql();
+      const database = createUserDB(sql);
+      const response = await database.fetch(
+        new Request('http://internal/internal/servers/1', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: 7, ...update }),
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(
+        sql.statements.some(
+          ({ query }) => query.startsWith('UPDATE servers SET') && query.includes('os = NULL')
+        )
+      ).toBe(true);
+    }
+
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+    await database.fetch(
+      new Request('http://internal/internal/servers/1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: 7, name: 'Renamed' }),
+      })
+    );
+    expect(sql.statements.some(({ query }) => query.includes('os = NULL'))).toBe(false);
+  });
+
+  it('GET /api 服务器列表返回 os 字段', async () => {
+    const sql = new FakeSql();
+    const database = createUserDB(sql);
+
+    const response = await database.fetch(
+      new Request('http://internal/internal/servers?user_id=7')
+    );
+    await expect(response.json()).resolves.toEqual([expect.objectContaining({ os: 'ubuntu' })]);
+  });
+});

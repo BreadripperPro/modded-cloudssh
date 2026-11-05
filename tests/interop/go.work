@@ -1,0 +1,5 @@
+// Editor/tooling workspace for the independent SSH interoperability gateway only.
+// Production CloudSSH remains TypeScript and does not build or deploy Go code.
+go 1.24.0
+
+use ./gateway

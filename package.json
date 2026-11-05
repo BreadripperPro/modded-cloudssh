@@ -1,0 +1,48 @@
+{
+  "name": "cloudssh",
+  "version": "2.9.0",
+  "packageManager": "pnpm@11.8.0",
+  "description": "纯 Cloudflare 架构 Web SSH 工具",
+  "main": "src/worker/index.ts",
+  "scripts": {
+    "dev": "node scripts/build-html.js && wrangler dev",
+    "deploy": "node scripts/build-html.js && wrangler deploy",
+    "deploy:test": "node scripts/build-html.js && wrangler deploy --env test",
+    "sync:theme-editor": "node scripts/sync-theme-editor.js",
+    "hash-password": "node scripts/hash-password.mjs",
+    "build:frontend": "node scripts/build-html.js",
+    "typecheck": "pnpm run typecheck:worker && pnpm run typecheck:frontend",
+    "typecheck:worker": "tsc --noEmit && tsc -p tests/tsconfig.worker.json --noEmit && tsc -p tests/tsconfig.frontend.json --noEmit",
+    "typecheck:frontend": "pnpm --dir frontend exec tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest watch",
+    "test:e2e": "playwright test",
+    "test:interop": "CLOUDSSH_SSHD_INTEROP=1 CLOUDSSH_GATEWAY_INTEROP=1 vitest run tests/interop",
+
+    "verify": "pnpm run typecheck && pnpm test && pnpm run build:frontend && pnpm run test:e2e"
+  },
+  "knip": {
+    "ignoreDependencies": [
+      "cloudflare",
+      "cloudflare:sockets"
+    ]
+  },
+  "keywords": [
+    "ssh",
+    "cloudflare",
+    "web-terminal"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@cloudflare/workers-types": "^4.20260630.1",
+    "@playwright/test": "1.62.0",
+    "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "typescript": "^5.7.0",
+    "vitest": "4.1.10",
+    "wrangler": "^4.125.0"
+  }
+}

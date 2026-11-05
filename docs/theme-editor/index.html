@@ -1,0 +1,4263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudSSH Theme Editor</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --editor-bg: #0a0a0a;
+      --editor-surface: #121212;
+      --editor-elevated: #131313;
+      --editor-text: #e5e2e1;
+      --editor-muted: #bbccb0;
+      --editor-dim: #3c4b36;
+      --editor-accent: #4af626;
+      --editor-secondary: #14d1ff;
+      --editor-border: #1f1f1f;
+      --editor-border-strong: #3c4b36;
+      --editor-error: #ffb4ab;
+      --editor-glow: rgba(74, 246, 38, 0.08);
+    }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--editor-bg);
+      color: var(--editor-text);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .editor-layout {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* ===== Sidebar ===== */
+    .sidebar {
+      width: 340px;
+      min-width: 340px;
+      background: var(--editor-elevated);
+      border-right: 1px solid var(--editor-border-strong);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--editor-border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .editor-brand {
+      min-width: 0;
+    }
+
+    .editor-brand__logo {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--editor-accent);
+      letter-spacing: -0.04em;
+    }
+
+    .editor-brand__title {
+      margin-top: 2px;
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--editor-secondary);
+      letter-spacing: 0.12em;
+    }
+
+    .sidebar-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .sidebar-actions button {
+      background: transparent;
+      border: 1px solid var(--editor-border-strong);
+      color: var(--editor-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: color 0.15s, background-color 0.15s, border-color 0.15s,
+        box-shadow 0.15s, transform 0.15s, opacity 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sidebar-actions button:hover {
+      border-color: var(--editor-accent);
+      color: var(--editor-accent);
+      box-shadow: 0 0 10px var(--editor-glow);
+    }
+
+    .sidebar-actions button.primary {
+      border-color: var(--editor-accent);
+      color: var(--editor-accent);
+    }
+
+    .sidebar-actions button.primary:hover {
+      background: var(--editor-accent);
+      color: #000;
+    }
+
+    .presets-bar {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--editor-border-strong);
+      flex-shrink: 0;
+    }
+
+    .presets-bar label {
+      font-size: 10px;
+      color: var(--editor-muted);
+      opacity: 0.65;
+      letter-spacing: 0.1em;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .preset-select-wrap {
+      position: relative;
+    }
+
+    .preset-select {
+      width: 100%;
+      min-width: 0;
+      appearance: none;
+      background: var(--editor-bg);
+      border: 1px solid var(--editor-border-strong);
+      color: var(--editor-text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      padding: 7px 32px 7px 10px;
+      cursor: pointer;
+      transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .preset-select:hover,
+    .preset-select:focus {
+      border-color: var(--editor-accent);
+      color: var(--editor-accent);
+      outline: none;
+      box-shadow: 0 0 10px var(--editor-glow);
+    }
+
+    .preset-select-wrap .material-symbols-outlined {
+      position: absolute;
+      top: 50%;
+      right: 9px;
+      color: var(--editor-muted);
+      font-size: 16px;
+      pointer-events: none;
+      transform: translateY(-50%);
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 20px 40px;
+    }
+
+    .sidebar-scroll::-webkit-scrollbar { width: 6px; }
+    .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--editor-border-strong); border-radius: 3px; }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--editor-muted);
+      opacity: 0.65;
+      letter-spacing: 0.15em;
+      margin: 16px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--editor-border);
+    }
+
+    .section-title:first-child { margin-top: 0; }
+
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      padding: 4px 0;
+    }
+
+    .color-row label {
+      font-size: 11px;
+      color: var(--editor-muted);
+      min-width: 140px;
+      flex-shrink: 0;
+    }
+
+    .color-row input[type="color"] {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--editor-border-strong);
+      border-radius: 4px;
+      padding: 2px;
+      background: var(--editor-surface);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    .color-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
+
+    .color-row input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      background: var(--editor-surface);
+      border: 1px solid var(--editor-border);
+      color: var(--editor-text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 5px 8px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .color-row input[type="text"]:focus {
+      border-color: var(--editor-accent);
+    }
+
+    .color-row input[type="text"][aria-invalid="true"] {
+      border-color: #ff5f57;
+      box-shadow: 0 0 0 1px rgba(255, 95, 87, 0.2);
+    }
+
+    .sidebar-actions button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .setting-row {
+      display: grid;
+      grid-template-columns: minmax(110px, 1fr) minmax(118px, 1fr);
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .setting-row label {
+      min-width: 0;
+      color: var(--editor-muted);
+      font-size: 11px;
+    }
+
+    .setting-row input:not([type='range']),
+    .setting-row select {
+      width: 100%;
+      min-width: 0;
+      background: var(--editor-surface);
+      border: 1px solid var(--editor-border);
+      color: var(--editor-text);
+      font: inherit;
+      font-size: 11px;
+      padding: 6px 8px;
+      outline: none;
+    }
+
+    .setting-row:has(input[type='range']) {
+      grid-template-columns: minmax(110px, 1fr) minmax(96px, 1fr) 44px;
+    }
+
+    .setting-row .range-value {
+      font-size: 11px;
+      color: var(--editor-muted);
+      text-align: right;
+    }
+
+    .setting-row input:focus,
+    .setting-row select:focus {
+      border-color: var(--editor-accent);
+    }
+
+    /* ===== Preview Area ===== */
+    .preview-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: var(--editor-bg);
+    }
+
+    .preview-area::-webkit-scrollbar { width: 8px; }
+    .preview-area::-webkit-scrollbar-track { background: var(--editor-surface); }
+    .preview-area::-webkit-scrollbar-thumb { background: var(--editor-border-strong); border-radius: 4px; }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 16px;
+    }
+
+    .preview-grid .col-terminal {
+      grid-column: 1 / -1;
+    }
+
+    .preview-section {
+      min-width: 0;
+    }
+
+    .preview-label {
+      font-size: 10px;
+      color: var(--editor-muted);
+      opacity: 0.65;
+      letter-spacing: 0.15em;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .preview-frame {
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--editor-border);
+    }
+
+    /* ===== Theme Variables (applied to preview) ===== */
+    .theme-scope {
+      --bg: #0a0a0a;
+      --bg-surface: #121212;
+      --bg-elevated: #131313;
+      --bg-terminal: #0e0e0e;
+      --text: #4af626;
+      --text-muted: #bbccb0;
+      --text-dim: #3c4b36;
+      --accent: #4af626;
+      --accent-secondary: #14d1ff;
+      --accent-secondary-light: #b7eaff;
+      --border: #1f1f1f;
+      --border-strong: #3c4b36;
+      --error: #ffb4ab;
+      --error-bg: #93000a;
+      --on-accent: #022100;
+      --surface-dot: #353534;
+      --scrollbar-track: rgba(28, 27, 27, 0.5);
+      --scrollbar-thumb: rgba(60, 75, 54, 0.8);
+      --scrollbar-thumb-hover: rgba(134, 149, 125, 0.8);
+      --scanline-tint: rgba(74, 246, 38, 0.02);
+      --accent-glow: rgba(74, 246, 38, 0.08);
+      --accent-bg: rgba(74, 246, 38, 0.1);
+      --modal-overlay: rgba(0, 0, 0, 0.8);
+      --on-surface: #e5e2e1;
+      --on-surface-variant: #bbccb0;
+      --agent-user-color: #4af626;
+      --agent-agent-color: #14d1ff;
+      --font-ui: 'JetBrains Mono', ui-monospace, monospace;
+      --font-size-scale: 0.94;
+      --space-scale: 0.84;
+      --control-radius: 2px;
+      --card-radius: 0px;
+      --control-padding-x: 8px;
+      --control-padding-y: 5px;
+      --card-padding: 14px;
+      --panel-gap: 10px;
+      --shadow-card: none;
+      --motion-fast: 140ms;
+      --motion-normal: 220ms;
+      --hover-lift: -2px;
+      font-family: var(--font-ui);
+      font-size: calc(1em * var(--font-size-scale));
+      position: relative;
+      isolation: isolate;
+      background-color: var(--bg);
+      background-image: var(--app-bg-stack, none);
+    }
+
+    /* V3：预览背景漂移（motion=none 时显式停止） */
+    .theme-scope[data-bg-animation='drift'] {
+      background-size: 200% 200%;
+      animation: theme-editor-bg-drift 40s ease-in-out infinite alternate;
+    }
+
+    .theme-scope[data-ui-motion='none'] {
+      animation: none;
+    }
+
+    @keyframes theme-editor-bg-drift {
+      0% {
+        background-position: 0% 0%;
+      }
+      100% {
+        background-position: 100% 100%;
+      }
+    }
+
+    /* V3：预览噪点层（垫在内容之下，仅作用于背景） */
+    .theme-scope[data-fx-noise='on']::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      opacity: var(--fx-noise-opacity, 0.05);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='en'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23en)'/%3E%3C/svg%3E");
+    }
+
+    /* V3：表面模糊档位（后置覆盖 shadow 派生值） */
+    .theme-scope[data-ui-blur='none'] {
+      --surface-blur: 0px;
+    }
+
+    .theme-scope[data-ui-blur='subtle'] {
+      --surface-blur: 6px;
+    }
+
+    .theme-scope[data-ui-blur='strong'] {
+      --surface-blur: 16px;
+    }
+
+    /* V3：预览辉光 */
+    .theme-scope[data-fx-glow='on'] .server-card {
+      box-shadow: var(--shadow-card), 0 4px calc(24px * var(--fx-glow-strength, 0.6)) var(--accent-glow);
+    }
+
+    .theme-scope[data-ui-shape="square"] {
+      --control-radius: 2px;
+      --card-radius: 0px;
+    }
+
+    .theme-scope[data-ui-shape="rounded"] {
+      --control-radius: 6px;
+      --card-radius: 9px;
+    }
+
+    .theme-scope[data-ui-shape="soft"] {
+      --control-radius: 10px;
+      --card-radius: 15px;
+    }
+
+    .theme-scope[data-ui-density="compact"] {
+      --font-size-scale: 0.94;
+      --space-scale: 0.84;
+      --control-padding-x: 7px;
+      --control-padding-y: 4px;
+      --card-padding: 12px;
+      --panel-gap: 8px;
+    }
+
+    .theme-scope[data-ui-density="comfortable"] {
+      --font-size-scale: 1;
+      --space-scale: 1;
+      --control-padding-x: 9px;
+      --control-padding-y: 6px;
+      --card-padding: 14px;
+      --panel-gap: 12px;
+    }
+
+    .theme-scope[data-ui-density="spacious"] {
+      --font-size-scale: 1.04;
+      --space-scale: 1.12;
+      --control-padding-x: 11px;
+      --control-padding-y: 8px;
+      --card-padding: 18px;
+      --panel-gap: 16px;
+    }
+
+    .theme-scope[data-ui-font="mono"] {
+      --font-ui: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    .theme-scope[data-ui-font="system"] {
+      --font-ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .theme-scope[data-ui-shadow="none"] {
+      --shadow-card: none;
+    }
+
+    .theme-scope[data-ui-shadow="subtle"] {
+      --shadow-card: 0 4px 16px color-mix(in srgb, var(--bg) 24%, transparent);
+    }
+
+    .theme-scope[data-ui-shadow="elevated"] {
+      --shadow-card: 0 12px 32px color-mix(in srgb, var(--bg) 32%, transparent);
+    }
+
+    .theme-scope[data-ui-motion="none"] {
+      --motion-fast: 0ms;
+      --motion-normal: 0ms;
+      --hover-lift: 0px;
+    }
+
+    .theme-scope[data-ui-motion="reduced"] {
+      --motion-fast: 80ms;
+      --motion-normal: 140ms;
+      --hover-lift: -1px;
+    }
+
+    .theme-scope[data-ui-motion="full"] {
+      --motion-fast: 140ms;
+      --motion-normal: 220ms;
+      --hover-lift: -2px;
+    }
+
+    .theme-scope :is(
+      .preview-frame,
+      .login-box,
+      .server-card-mock,
+      .terminal-preview,
+      .sftp-preview,
+      .agent-preview
+    ) {
+      border-radius: var(--card-radius);
+      box-shadow: var(--shadow-card);
+      transition: background-color var(--motion-normal) ease,
+        border-color var(--motion-normal) ease,
+        border-radius var(--motion-normal) ease,
+        box-shadow var(--motion-normal) ease,
+        color var(--motion-normal) ease,
+        transform var(--motion-normal) ease;
+    }
+
+    .theme-scope :is(
+      .login-field .input-line,
+      .search-box,
+      .sftp-toolbar .path-input,
+      .agent-input
+    ) {
+      border-radius: var(--control-radius);
+      padding: var(--control-padding-y) var(--control-padding-x);
+    }
+
+    .theme-scope :is(
+      .connect-btn,
+      .cards-header .add-btn,
+      .card-connect,
+      .sftp-action-btn,
+      .agent-send-btn,
+      .agent-md-code-action
+    ) {
+      border-radius: var(--control-radius);
+      padding: var(--control-padding-y) var(--control-padding-x);
+      transition: background-color var(--motion-fast) ease,
+        border-color var(--motion-fast) ease,
+        border-radius var(--motion-fast) ease,
+        box-shadow var(--motion-fast) ease,
+        color var(--motion-fast) ease,
+        transform var(--motion-fast) ease;
+    }
+
+    .theme-scope :is(.server-card-mock, .login-box) {
+      padding: var(--card-padding);
+    }
+
+    .theme-scope :is(.cards-grid, .terminal-sftp-preview) {
+      gap: var(--panel-gap);
+    }
+
+    .theme-scope[data-component-input="underline"] :is(
+      .login-field .input-line,
+      .search-box,
+      .sftp-toolbar .path-input,
+      .agent-input
+    ) {
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--border-strong);
+      border-radius: 0;
+    }
+
+    .theme-scope[data-component-input="boxed"] :is(
+      .login-field .input-line,
+      .search-box,
+      .sftp-toolbar .path-input,
+      .agent-input
+    ) {
+      background: color-mix(in srgb, var(--bg-terminal) 88%, var(--bg-surface));
+      border: 1px solid var(--border-strong);
+    }
+
+    .theme-scope[data-component-button="outline"] :is(
+      .connect-btn,
+      .cards-header .add-btn,
+      .card-connect,
+      .sftp-action-btn,
+      .agent-send-btn
+    ) {
+      color: var(--accent);
+      background: transparent;
+      border-color: var(--accent);
+    }
+
+    .theme-scope[data-component-button="solid"] :is(
+      .connect-btn,
+      .cards-header .add-btn,
+      .card-connect,
+      .sftp-action-btn,
+      .agent-send-btn
+    ) {
+      color: var(--on-accent);
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .theme-scope[data-component-button="soft"] :is(
+      .connect-btn,
+      .cards-header .add-btn,
+      .card-connect,
+      .sftp-action-btn,
+      .agent-send-btn
+    ) {
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+      border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+    }
+
+    .theme-scope[data-component-card="flat"] :is(.login-box, .server-card-mock, .agent-preview) {
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    .theme-scope[data-component-card="outlined"] :is(.login-box, .server-card-mock, .agent-preview) {
+      border-color: var(--border);
+    }
+
+    .theme-scope[data-component-card="elevated"] :is(.login-box, .server-card-mock, .agent-preview) {
+      background: color-mix(in srgb, var(--bg-surface) 96%, var(--accent) 4%);
+      border-color: color-mix(in srgb, var(--border) 72%, transparent);
+    }
+
+    .theme-scope[data-component-tabs="segmented"] :is(.auth-tab, .preview-tab-item) {
+      margin: 3px 2px;
+      border: 1px solid transparent;
+      border-radius: var(--control-radius);
+      background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+    }
+
+    .theme-scope[data-component-tabs="segmented"] :is(.auth-tab.active, .preview-tab-item.active) {
+      background: var(--accent-bg);
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    }
+
+    .theme-scope[data-component-tabs="segmented"] .preview-tab-item.active::after {
+      display: none;
+    }
+
+    .theme-scope:not([data-fx-scanline='on']) :is(.scanlines, .scanline),
+    .theme-scope:not([data-fx-flicker='on']) .flicker {
+      display: none;
+    }
+
+    .theme-scope[data-fx-scanline='on'] .scanlines {
+      opacity: var(--fx-scanline-opacity, 1);
+    }
+
+    .theme-scope[data-fx-flicker='on'] .flicker {
+      animation-duration: var(--fx-flicker-speed, 0.15s);
+    }
+
+    .theme-scope[data-ui-motion="none"] * {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    /* ===== Login Preview ===== */
+    .login-preview {
+      background: var(--bg);
+      padding: 24px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-preview .scanlines {
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, transparent, transparent 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+      background-size: 100% 4px;
+      pointer-events: none; z-index: 1;
+    }
+
+    .login-preview .flicker {
+      position: absolute; inset: 0;
+      background: var(--scanline-tint);
+      pointer-events: none; z-index: 1;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .login-title {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .login-title .logo {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.05em;
+    }
+
+    .login-title .cursor {
+      display: inline-block;
+      width: 10px;
+      height: 20px;
+      background: var(--accent-secondary);
+      margin-left: 2px;
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .login-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 20px;
+      position: relative;
+    }
+
+    .login-box .top-bar {
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(to right, transparent, var(--accent), transparent);
+      opacity: 0.5;
+    }
+
+    .login-box .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-strong);
+    }
+
+    .login-box .header span {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--accent-secondary);
+    }
+
+    .login-field {
+      margin-bottom: 14px;
+    }
+
+    .login-field label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .login-field .input-line {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border-strong);
+      padding-bottom: 6px;
+    }
+
+    .login-field .input-line .prefix {
+      color: var(--text-muted);
+      margin-right: 8px;
+      font-size: 12px;
+    }
+
+    .login-field .input-line .placeholder-text {
+      color: var(--text-dim);
+      font-size: 12px;
+    }
+
+    .login-field .input-line:focus-within {
+      border-bottom-color: var(--accent);
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .auth-tab {
+      padding: 3px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      border: 1px solid var(--border-strong);
+      color: var(--text-muted);
+      background: transparent;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .auth-tab.active {
+      background: var(--accent);
+      color: var(--on-accent);
+      border-color: var(--accent);
+    }
+
+    .connect-btn {
+      width: 100%;
+      padding: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: var(--accent);
+      color: var(--on-accent);
+      border: 1px solid var(--accent);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 16px;
+      transition: background-color 0.2s, border-color 0.2s, color 0.2s,
+        box-shadow 0.2s, transform 0.2s;
+    }
+
+    .connect-btn:hover {
+      background: var(--accent-secondary-light);
+      border-color: var(--accent-secondary-light);
+      color: var(--bg);
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      font-size: 11px;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--surface-dot);
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    .status-text { color: var(--text-muted); }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.6;
+    }
+
+    .login-footer a {
+      color: var(--accent);
+      text-decoration: none;
+      opacity: 0.6;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* ===== Terminal Preview ===== */
+    .terminal-preview {
+      background: var(--bg-terminal);
+      padding: 16px;
+      min-height: 240px;
+      font-size: 12px;
+      line-height: 1.6;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .terminal-preview .scanline {
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, transparent, transparent 50%, rgba(0,0,0,0.08) 50%, rgba(0,0,0,0.08));
+      background-size: 100% 4px;
+      pointer-events: none; z-index: 1;
+      opacity: 0.3;
+    }
+
+    .terminal-statusbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: var(--on-surface-variant);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      opacity: 0.8;
+      position: relative;
+      z-index: 2;
+    }
+
+    .terminal-statusbar .connected {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .terminal-statusbar .dot-green {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .network-latency-preview {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      white-space: nowrap;
+    }
+
+    .network-latency-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .network-quality-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+
+    .network-quality-good {
+      background: #22c55e;
+      box-shadow: 0 0 5px rgba(34, 197, 94, 0.65);
+    }
+
+    .network-quality-fair {
+      background: #f59e0b;
+      box-shadow: 0 0 5px rgba(245, 158, 11, 0.65);
+    }
+
+    .network-quality-poor {
+      background: #ef4444;
+      box-shadow: 0 0 5px rgba(239, 68, 68, 0.65);
+    }
+
+    .terminal-body {
+      position: relative;
+      z-index: 2;
+    }
+
+    .terminal-body .line { margin-bottom: 2px; }
+    .terminal-body .green { color: var(--accent); }
+    .terminal-body .cyan { color: var(--accent-secondary); }
+    .terminal-body .yellow { color: #e6db74; }
+    .terminal-body .red { color: var(--error); }
+    .terminal-body .gray { color: var(--text-dim); }
+    .terminal-body .white { color: var(--text); }
+    .terminal-body .prompt { color: var(--accent); font-weight: 600; }
+    .terminal-body .path { color: var(--accent-secondary); }
+
+    .ask-ai-selection-preview {
+      position: absolute;
+      right: 18px;
+      bottom: 16px;
+      z-index: 3;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 7px;
+      color: var(--accent);
+      background: var(--bg-elevated);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      font-size: 9px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .ask-ai-selection-preview .material-symbols-outlined {
+      font-size: 13px;
+    }
+
+    .terminal-input-mock {
+      display: flex;
+      align-items: center;
+      margin-top: 6px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .terminal-input-mock .prompt-sign {
+      color: var(--accent);
+      margin-right: 6px;
+      font-weight: 600;
+    }
+
+    .terminal-input-mock .cursor-block {
+      display: inline-block;
+      width: 8px;
+      height: 14px;
+      background: var(--accent-secondary);
+      animation: blink 1s step-end infinite;
+      vertical-align: middle;
+    }
+
+    /* ===== User Space Preview ===== */
+    .userspace-preview {
+      background: var(--bg-elevated);
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+    }
+
+    .us-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      height: 48px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-strong);
+      flex-shrink: 0;
+    }
+
+    .us-header .logo {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.05em;
+    }
+
+    .us-header .user-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .us-header .avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      background: var(--bg-surface);
+    }
+
+    .us-header .username {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .us-header .logout-icon {
+      color: var(--error);
+      font-size: 16px;
+    }
+
+    .us-body {
+      flex: 1;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .us-body .scanlines {
+      position: absolute; inset: 0;
+      background: var(--modal-overlay);
+      pointer-events: none;
+    }
+
+    .us-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .us-section-header h2 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+    }
+
+    .us-section-header .sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    .us-section-header .add-btn {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 4px 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .us-search-preview {
+      position: relative;
+      z-index: 1;
+      width: min(260px, 100%);
+      margin-bottom: 12px;
+    }
+
+    .us-search-preview .material-symbols-outlined {
+      position: absolute;
+      left: 9px;
+      top: 50%;
+      color: var(--text-dim);
+      font-size: 14px;
+      pointer-events: none;
+      transform: translateY(-50%);
+    }
+
+    .us-search-preview input {
+      width: 100%;
+      min-width: 0;
+      padding: 6px 10px 6px 30px;
+      color: var(--on-surface);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      font: inherit;
+      font-size: 10px;
+    }
+
+    .us-search-preview input::placeholder {
+      color: var(--text-muted);
+      opacity: 0.75;
+    }
+
+    .us-cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .us-footer {
+      padding: 0 16px;
+      height: 36px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border-strong);
+      font-size: 9px;
+      color: var(--on-surface-variant);
+      opacity: 0.6;
+      flex-shrink: 0;
+      background: var(--bg-elevated);
+    }
+
+    /* ===== Server Cards Preview ===== */
+    .cards-preview {
+      background: var(--bg);
+      padding: 0;
+    }
+
+    .cards-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .cards-header h2 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+    }
+
+    .cards-header .add-btn {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 5px 12px;
+      cursor: pointer;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .server-card-mock {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 14px;
+      position: relative;
+      transition: border-color 0.2s;
+    }
+
+    .server-card-mock .top-line {
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(to right, transparent, var(--border-strong), transparent);
+    }
+
+    .server-card-mock:hover {
+      border-color: var(--accent);
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .server-card-mock:hover .top-line {
+      background: linear-gradient(to right, transparent, var(--accent), transparent);
+    }
+
+    .card-title-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .card-title-row .icon {
+      color: var(--accent);
+      font-size: 16px;
+    }
+
+    .card-title-row h3 {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+
+    .card-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      border: 1px solid var(--border-strong);
+      padding: 2px 6px;
+      margin-left: auto;
+    }
+
+    .card-info {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .card-info div {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+
+    .card-info .label {
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+    .card-info .value { color: var(--on-surface); }
+
+    .card-info .card-region-row {
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+
+    .card-info .region-value {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-info .region-value .material-symbols-outlined {
+      color: var(--accent-secondary);
+      font-size: 10px;
+    }
+
+    .card-region-tag {
+      margin-left: 2px;
+      padding: 1px 3px;
+      color: var(--text-dim);
+      border: 1px solid var(--border-strong);
+      font-size: 8px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 6px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .card-btn {
+      flex: 1;
+      padding: 4px 8px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .card-btn .material-symbols-outlined { font-size: 12px; }
+
+    .card-btn.delete {
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    .card-btn.delete:hover {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    /* ===== Terminal + SFTP Layout ===== */
+    .terminal-sftp-preview {
+      display: flex;
+      min-height: 280px;
+    }
+
+    .terminal-sftp-preview .terminal-preview {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ===== SFTP Preview ===== */
+    .sftp-preview {
+      width: 320px;
+      min-width: 320px;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--border-strong);
+    }
+
+    .sftp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      height: 36px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-strong);
+      flex-shrink: 0;
+    }
+
+    .sftp-header .title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sftp-header .title .icon {
+      color: var(--accent);
+      font-size: 14px;
+    }
+
+    .sftp-header .title span {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+    }
+
+    .sftp-header .close-icon {
+      color: var(--on-surface-variant);
+      font-size: 14px;
+    }
+
+    .sftp-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border-strong);
+      flex-shrink: 0;
+    }
+
+    .sftp-toolbar .nav-icon {
+      color: var(--on-surface-variant);
+      font-size: 14px;
+      padding: 2px;
+    }
+
+    .sftp-toolbar .path-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border-strong);
+      color: var(--on-surface);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 3px 6px;
+      outline: none;
+    }
+
+    .sftp-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 4px 10px;
+      border-bottom: 1px solid var(--border-strong);
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+
+    .sftp-action-btn {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 6px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0;
+    }
+
+    .sftp-action-btn.secondary {
+      color: var(--accent-secondary);
+    }
+
+    .sftp-action-btn .material-symbols-outlined {
+      font-size: 12px;
+    }
+
+    .sftp-file-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+
+    .sftp-file-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      font-size: 11px;
+      color: var(--on-surface);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+
+    .sftp-file-item:hover {
+      background: var(--surface-dot);
+    }
+
+    .sftp-file-item.selected {
+      background: var(--surface-dot);
+    }
+
+    .sftp-file-item .file-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .sftp-file-item .file-icon.dir {
+      color: var(--accent);
+    }
+
+    .sftp-file-item .file-icon.file {
+      color: var(--on-surface-variant);
+    }
+
+    .sftp-file-item .file-icon.link {
+      color: var(--accent-secondary);
+    }
+
+    .sftp-file-item .file-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sftp-file-item .file-name.dir {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .sftp-file-item .file-size {
+      color: var(--on-surface-variant);
+      font-size: 10px;
+      width: 60px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .sftp-file-item .file-perms {
+      color: var(--on-surface-variant);
+      font-size: 9px;
+      width: 70px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .sftp-file-item .file-date {
+      color: var(--on-surface-variant);
+      font-size: 9px;
+      width: 80px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .sftp-statusbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 12px;
+      background: var(--bg-elevated);
+      border-top: 1px solid var(--border-strong);
+      font-size: 9px;
+      color: var(--on-surface-variant);
+      flex-shrink: 0;
+    }
+
+    /* ===== Tab Bar Preview ===== */
+    .preview-tab-bar {
+      display: flex;
+      align-items: center;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 8px;
+      height: 32px;
+      overflow-x: auto;
+      gap: 2px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .preview-tab-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      cursor: pointer;
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .preview-tab-item:hover {
+      color: var(--text);
+      background: var(--bg-elevated);
+      border-color: var(--border);
+    }
+
+    .preview-tab-item.active {
+      color: var(--accent);
+      background: var(--bg-elevated);
+      border-color: var(--border-strong);
+    }
+
+    .preview-tab-item.active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+
+    .preview-tab-item.disconnected {
+      opacity: 0.5;
+    }
+
+    .preview-tab-item.disconnected .tab-label {
+      text-decoration: line-through;
+    }
+
+    .preview-tab-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .preview-tab-dot.connected {
+      background: var(--accent);
+      box-shadow: 0 0 3px var(--accent);
+    }
+
+    .preview-tab-dot.disconnected {
+      background: var(--text-dim);
+    }
+
+    .preview-tab-close {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      cursor: pointer;
+      opacity: 0;
+      transition: color 0.15s, opacity 0.15s;
+    }
+
+    .preview-tab-item:hover .preview-tab-close,
+    .preview-tab-item.active .preview-tab-close {
+      opacity: 1;
+    }
+
+    .preview-tab-close:hover {
+      color: var(--error);
+    }
+
+    .preview-tab-new-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      border: 1px dashed var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      border-radius: 3px;
+      cursor: pointer;
+      margin-left: 2px;
+    }
+
+    .preview-tab-new-btn:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--bg-elevated);
+    }
+
+    /* ===== Agent Panel Preview ===== */
+    .preview-grid .col-agent {
+      grid-column: 1 / -1;
+    }
+
+    .agent-preview {
+      background: var(--bg);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 260px;
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+
+    .agent-header-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--accent-secondary);
+    }
+
+    .agent-close-icon {
+      font-size: 14px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .agent-messages {
+      flex: 1;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    /* User message bubble */
+    .agent-msg-user {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      align-items: flex-start;
+    }
+
+    .agent-msg-user .agent-msg-text {
+      background: color-mix(in srgb, var(--agent-user-color) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--agent-user-color) 30%, transparent);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--agent-user-color);
+      max-width: 70%;
+    }
+
+    .agent-icon-user {
+      font-size: 14px;
+      color: var(--agent-user-color);
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    /* Agent message */
+    .agent-msg-agent {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .agent-icon-bot {
+      font-size: 14px;
+      color: var(--agent-agent-color);
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .agent-response-body {
+      font-size: 11px;
+      color: var(--on-surface);
+      line-height: 1.5;
+    }
+
+    .agent-response-body h3 {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--agent-agent-color);
+      margin-bottom: 6px;
+    }
+
+    .agent-response-body p {
+      margin-top: 6px;
+    }
+
+    .agent-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 10px;
+      margin: 4px 0;
+    }
+
+    .agent-table th,
+    .agent-table td {
+      padding: 3px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--agent-agent-color) 20%, transparent);
+      text-align: left;
+    }
+
+    .agent-table th {
+      font-weight: 700;
+      color: var(--agent-agent-color);
+      background: color-mix(in srgb, var(--agent-agent-color) 10%, transparent);
+    }
+
+    .agent-response-body .agent-md-code-block {
+      margin-top: 8px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--agent-agent-color) 8%, transparent);
+      border: 1px solid color-mix(in srgb, var(--agent-agent-color) 15%, transparent);
+      border-radius: 6px;
+    }
+
+    .agent-response-body .agent-md-code-toolbar {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 5px 3px 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--agent-agent-color) 12%, transparent);
+    }
+
+    .agent-response-body .agent-md-lang {
+      color: var(--agent-agent-color);
+      font-size: 9px;
+      opacity: 0.65;
+      flex-shrink: 0;
+    }
+
+    .agent-response-body .agent-md-code-meta {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      color: var(--on-surface-variant);
+      font-size: 9px;
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .agent-response-body .agent-md-code-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .agent-response-body .agent-md-code-action {
+      min-height: 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 5px;
+      color: var(--agent-agent-color);
+      background: color-mix(in srgb, var(--agent-agent-color) 6%, transparent);
+      border: 1px solid color-mix(in srgb, var(--agent-agent-color) 22%, transparent);
+      border-radius: 4px;
+      font: inherit;
+      font-size: 9px;
+    }
+
+    .agent-response-body .agent-md-code-action .material-symbols-outlined {
+      font-size: 12px;
+    }
+
+    .agent-response-body .agent-md-pre {
+      margin: 0;
+      padding: 8px 10px;
+      overflow-x: auto;
+      color: var(--agent-agent-color);
+      font-size: 10px;
+      white-space: pre-wrap;
+    }
+
+    /* Thinking Process (collapsed) */
+    .tp-container {
+      border: 1px solid color-mix(in srgb, var(--agent-agent-color) 20%, transparent);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .tp-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 10px;
+      background: color-mix(in srgb, var(--agent-agent-color) 6%, transparent);
+      font-size: 10px;
+    }
+
+    .tp-header .tp-chevron {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .tp-header .tp-icon {
+      font-size: 14px;
+      color: var(--agent-agent-color);
+    }
+
+    .tp-status-text {
+      color: var(--on-surface-variant);
+      font-weight: 600;
+    }
+
+    /* Input bar */
+    .agent-input-bar {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+
+    .agent-input {
+      flex: 1;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--on-surface);
+      resize: none;
+      font-family: inherit;
+      min-height: 32px;
+    }
+
+    .agent-input::placeholder {
+      color: var(--on-surface-variant);
+      opacity: 0.7;
+    }
+
+    .agent-send-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: none;
+      background: var(--accent);
+      color: var(--on-accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* ===== Shared latest-project controls ===== */
+    .language-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 26px;
+      color: var(--editor-muted);
+      background: color-mix(in srgb, var(--editor-surface) 82%, transparent);
+      border: 1px solid var(--editor-border-strong);
+      border-radius: 9999px;
+      padding: 0 8px;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1;
+      cursor: pointer;
+      transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    .language-toggle:hover {
+      color: var(--editor-secondary);
+      border-color: var(--editor-secondary);
+      background: var(--editor-glow);
+      box-shadow: 0 0 10px var(--editor-glow);
+      transform: translateY(-1px);
+    }
+
+    .language-toggle:focus-visible,
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid var(--editor-secondary);
+      outline-offset: 2px;
+    }
+
+    .language-toggle .material-symbols-outlined {
+      color: var(--editor-secondary);
+      font-size: 13.5px;
+    }
+
+    .preview-language-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 18px;
+      color: var(--on-surface-variant);
+      background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+      border: 1px solid var(--border-strong);
+      border-radius: 9999px;
+      padding: 0 6px;
+      font-size: 8px;
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    .preview-language-toggle .material-symbols-outlined {
+      color: var(--accent-secondary);
+      font-size: 11px;
+    }
+
+    .terminal-appbar {
+      min-height: 44px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border-strong);
+    }
+
+    .terminal-appbar__brand {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+
+    .terminal-appbar__actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      color: var(--accent);
+    }
+
+    .terminal-theme-select {
+      color: var(--on-surface-variant);
+      background: var(--surface-dot);
+      border: 0;
+      border-radius: 3px;
+      padding: 3px 5px;
+      font: inherit;
+      font-size: 8px;
+    }
+
+    .terminal-tool-icon {
+      font-size: 14px;
+      color: var(--accent);
+    }
+
+    .toast-region {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 1000;
+      width: min(360px, calc(100vw - 32px));
+      pointer-events: none;
+    }
+
+    .editor-toast {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 12px;
+      color: var(--editor-text);
+      background: var(--editor-elevated);
+      border: 1px solid var(--editor-secondary);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+      font-size: 11px;
+      line-height: 1.5;
+      pointer-events: auto;
+      animation: toast-in 160ms ease-out;
+    }
+
+    .editor-toast.error {
+      border-color: var(--editor-error);
+    }
+
+    .editor-toast .material-symbols-outlined {
+      color: var(--editor-secondary);
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .editor-toast.error .material-symbols-outlined {
+      color: var(--editor-error);
+    }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 1180px) {
+      .preview-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-grid .col-terminal,
+      .preview-grid .col-agent {
+        grid-column: 1;
+      }
+    }
+
+    @media (max-width: 760px) {
+      body {
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+      }
+
+      .editor-layout {
+        display: block;
+        height: auto;
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        width: 100%;
+        min-width: 0;
+        max-height: 54vh;
+        border-right: 0;
+        border-bottom: 1px solid var(--editor-border-strong);
+      }
+
+      .sidebar-header {
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .preview-area {
+        padding: 12px;
+        overflow: visible;
+      }
+
+      .terminal-sftp-preview {
+        flex-direction: column;
+      }
+
+      .sftp-preview {
+        width: 100%;
+        min-width: 0;
+        border-left: 0;
+        border-top: 1px solid var(--border-strong);
+      }
+
+      .terminal-statusbar > div:first-child {
+        gap: 8px !important;
+        flex-wrap: wrap;
+      }
+
+      .sftp-file-item .file-perms,
+      .sftp-file-item .file-date {
+        display: none;
+      }
+
+      .us-cards-grid,
+      .cards-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ===== Hidden file input ===== */
+    #import-input { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="editor-layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="editor-brand">
+        <div class="editor-brand__logo">CloudSSH</div>
+        <div class="editor-brand__title" data-i18n="editor.title">主题在线编辑器</div>
+      </div>
+      <div class="sidebar-actions">
+        <button id="language-toggle" class="language-toggle" type="button">
+          <span class="material-symbols-outlined" aria-hidden="true">language</span>
+          <span id="language-toggle-label">English</span>
+        </button>
+        <button id="btn-import" data-i18n-title="editor.importTitle" title="导入 JSON">
+          <span class="material-symbols-outlined" style="font-size:13px">upload_file</span>
+          <span data-i18n="editor.import">导入</span>
+        </button>
+        <button id="btn-export" class="primary" data-i18n-title="editor.exportTitle" title="导出 JSON">
+          <span class="material-symbols-outlined" style="font-size:13px">download</span>
+          <span data-i18n="editor.export">导出</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="presets-bar">
+      <label for="preset-select" data-i18n="editor.presets">预设主题</label>
+      <div class="preset-select-wrap">
+        <select id="preset-select" class="preset-select">
+          <option value="custom" data-i18n="editor.custom" disabled>自定义</option>
+          <option value="standard-dark">Standard Dark</option>
+          <option value="standard-light">Standard Light</option>
+          <option value="cyberpunk" selected>Cyberpunk</option>
+          <option value="liquid-glass">Liquid Glass</option>
+        </select>
+        <span class="material-symbols-outlined" aria-hidden="true">expand_more</span>
+      </div>
+    </div>
+
+    <div class="sidebar-scroll" id="controls"></div>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-area">
+    <div class="theme-scope" id="theme-scope">
+      <div class="preview-grid">
+
+        <!-- Login Page (Top Left) -->
+        <div class="preview-section">
+          <div class="preview-label" data-i18n="preview.login">匿名连接</div>
+          <div class="preview-frame">
+            <div class="login-preview">
+              <div class="scanlines"></div>
+              <div class="flicker"></div>
+              <div class="login-card">
+                <div class="login-title">
+                  <span class="logo">CloudSSH</span><span class="cursor"></span>
+                </div>
+                <div class="login-box">
+                  <div class="top-bar"></div>
+                  <div class="header">
+                    <span data-i18n="auth.connectionParameters">连接参数</span>
+                    <span style="display:flex;align-items:center;gap:6px">
+                      <span class="preview-language-toggle">
+                        <span class="material-symbols-outlined" aria-hidden="true">language</span>
+                        <span data-language-preview-label>English</span>
+                      </span>
+                      <span class="material-symbols-outlined" style="font-size:14px;color:var(--accent-secondary);font-variation-settings:'FILL' 0">terminal</span>
+                    </span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:3fr 1fr;gap:12px;margin-bottom:12px">
+                    <div class="login-field" style="margin-bottom:0">
+                      <label data-i18n="auth.host">主机地址</label>
+                      <div class="input-line">
+                        <span class="prefix">&gt;</span>
+                        <span class="placeholder-text">192.168.1.1</span>
+                      </div>
+                    </div>
+                    <div class="login-field" style="margin-bottom:0">
+                      <label data-i18n="auth.port">端口</label>
+                      <div class="input-line">
+                        <span class="prefix">:</span>
+                        <span class="placeholder-text">22</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="login-field">
+                    <label data-i18n="auth.user">用户名</label>
+                    <div class="input-line">
+                      <span class="material-symbols-outlined prefix" style="font-size:14px">person</span>
+                      <span class="placeholder-text">admin</span>
+                    </div>
+                  </div>
+                  <div class="login-field">
+                    <label data-i18n="auth.method">认证方式</label>
+                    <div class="auth-tabs">
+                      <span class="auth-tab active" data-i18n="common.password">密码</span>
+                      <span class="auth-tab" data-i18n="common.privateKey">私钥</span>
+                    </div>
+                    <div class="input-line" style="border-bottom:1px solid var(--border-strong);padding-bottom:6px">
+                      <span class="material-symbols-outlined prefix" style="font-size:14px">key</span>
+                      <span class="placeholder-text">••••••••</span>
+                    </div>
+                  </div>
+                  <div class="login-field">
+                    <label><span data-i18n="auth.regionHint">连接区域</span> <span style="font-size:8px;opacity:0.6;font-weight:400" data-i18n="common.optional">可选</span></label>
+                    <div class="input-line" style="border-bottom:1px solid var(--border-strong);padding-bottom:6px;justify-content:space-between">
+                      <span class="placeholder-text" data-i18n="region.auto">自动（保存时由系统推断）</span>
+                      <span class="material-symbols-outlined" style="font-size:12px;color:var(--text-muted)">expand_more</span>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:8px;margin-bottom:4px">
+                    <span style="width:14px;height:14px;border:1px solid var(--border-strong);border-radius:2px;display:inline-block;background:var(--bg-surface)"></span>
+                    <label style="font-size:10px;color:var(--text-muted);cursor:pointer" data-i18n="auth.remember">记住连接信息</label>
+                  </div>
+                  <button class="connect-btn" style="margin-top:12px">
+                    <span class="material-symbols-outlined" style="font-size:14px">power_settings_new</span>
+                    <span data-i18n="auth.execute">建立连接</span>
+                  </button>
+                  <div class="status-bar">
+                    <span class="status-text"><span class="status-dot"></span> <span data-i18n="auth.statusOffline">状态：离线</span></span>
+                    <span style="font-size:10px;color:var(--text-muted);opacity:0.5">GitHub</span>
+                  </div>
+                  <!-- Recent Connections Preview -->
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); display: block;">
+                    <label style="display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--accent-secondary); margin-bottom: 8px;" data-i18n="auth.recent">最近连接</label>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 6px 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.02); cursor: pointer;">
+                        <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; margin-right: 6px;">
+                          <span class="material-symbols-outlined" style="font-size: 12px; color: var(--text-muted)">history</span>
+                          <span style="color: var(--on-surface); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">admin@192.168.1.1:22</span>
+                          <span style="font-size: 8px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-muted); border: 1px solid var(--border-strong); padding: 1px 3px;">PWD</span>
+                        </div>
+                        <span class="material-symbols-outlined" style="font-size: 12px; color: var(--text-dim)">close</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 6px 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.02); cursor: pointer;">
+                        <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; margin-right: 6px;">
+                          <span class="material-symbols-outlined" style="font-size: 12px; color: var(--text-muted)">history</span>
+                          <span style="color: var(--on-surface); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">deploy@10.0.0.5:2222</span>
+                          <span style="font-size: 8px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-muted); border: 1px solid var(--border-strong); padding: 1px 3px;">KEY</span>
+                        </div>
+                        <span class="material-symbols-outlined" style="font-size: 12px; color: var(--text-dim)">close</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="login-footer">
+                  <a href="#">[ GitHub Open Source ]</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Space (Top Right) -->
+        <div class="preview-section">
+          <div class="preview-label" data-i18n="preview.userSpace">用户空间</div>
+          <div class="preview-frame">
+            <div class="userspace-preview">
+              <div class="us-header">
+                <span class="logo">CloudSSH</span>
+                <div class="user-area">
+                  <span class="preview-language-toggle">
+                    <span class="material-symbols-outlined" aria-hidden="true">language</span>
+                    <span data-language-preview-label>English</span>
+                  </span>
+                  <div class="avatar"></div>
+                  <span class="username">admin</span>
+                  <span class="material-symbols-outlined" style="color:var(--on-surface-variant);font-size:16px;font-variation-settings:'FILL' 0">psychology</span>
+                  <span class="material-symbols-outlined logout-icon" style="font-variation-settings:'FILL' 0">logout</span>
+                </div>
+              </div>
+              <div class="us-body">
+                <div class="scanlines"></div>
+                <div class="us-section-header">
+                  <div>
+                    <h2 data-i18n="server.list">服务器列表</h2>
+                    <div class="sub" data-i18n="server.manage">管理你的 SSH 连接</div>
+                  </div>
+                  <span class="add-btn">
+                    <span class="material-symbols-outlined" style="font-size:13px">add</span>
+                    <span data-i18n="server.add">添加服务器</span>
+                  </span>
+                </div>
+                <div class="us-search-preview">
+                  <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                  <input type="search" data-i18n-placeholder="server.searchPlaceholder" placeholder="按名称、主机或用户名搜索" readonly>
+                </div>
+                <div class="us-cards-grid">
+                  <div class="server-card-mock">
+                    <div class="top-line"></div>
+                    <div class="card-title-row">
+                      <span class="material-symbols-outlined icon" style="font-variation-settings:'FILL' 0">dns</span>
+                      <h3>Production</h3>
+                      <span class="card-badge">PWD</span>
+                    </div>
+                    <div class="card-info">
+                      <div><span class="label" data-i18n="server.hostLabel">主机</span><span class="value">192.168.1.10:22</span></div>
+                      <div><span class="label" data-i18n="server.userLabel">用户</span><span class="value">root</span></div>
+                      <div class="card-region-row">
+                        <span class="label" data-i18n="server.regionLabel">区域</span>
+                        <span class="value region-value"><span class="material-symbols-outlined">my_location</span>APAC NE</span>
+                        <span class="card-region-tag" data-i18n="server.regionAuto">自动</span>
+                      </div>
+                    </div>
+                    <div class="card-actions">
+                      <span class="card-btn"><span class="material-symbols-outlined">power_settings_new</span> <span data-i18n="common.connect">连接</span></span>
+                      <span class="card-btn"><span class="material-symbols-outlined">edit</span></span>
+                      <span class="card-btn delete"><span class="material-symbols-outlined">delete</span></span>
+                    </div>
+                  </div>
+                  <div class="server-card-mock">
+                    <div class="top-line"></div>
+                    <div class="card-title-row">
+                      <span class="material-symbols-outlined icon" style="font-variation-settings:'FILL' 0">dns</span>
+                      <h3>Staging</h3>
+                      <span class="card-badge">KEY</span>
+                    </div>
+                    <div class="card-info">
+                      <div><span class="label" data-i18n="server.hostLabel">主机</span><span class="value">10.0.0.5:2222</span></div>
+                      <div><span class="label" data-i18n="server.userLabel">用户</span><span class="value">deploy</span></div>
+                      <div class="card-region-row">
+                        <span class="label" data-i18n="server.regionLabel">区域</span>
+                        <span class="value region-value"><span class="material-symbols-outlined">my_location</span>WEUR</span>
+                        <span class="card-region-tag" data-i18n="server.regionManual">手动</span>
+                      </div>
+                    </div>
+                    <div class="card-actions">
+                      <span class="card-btn"><span class="material-symbols-outlined">power_settings_new</span> <span data-i18n="common.connect">连接</span></span>
+                      <span class="card-btn"><span class="material-symbols-outlined">edit</span></span>
+                      <span class="card-btn delete"><span class="material-symbols-outlined">delete</span></span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Server Modal Preview -->
+                <div class="us-section-header" style="margin-top:16px">
+                  <div>
+                    <h2><span data-i18n="server.add">添加服务器</span> <span style="font-size:10px;color:var(--text-muted);font-weight:400" data-i18n="preview.modal">（弹窗预览）</span></h2>
+                  </div>
+                </div>
+                <div style="background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:8px;padding:16px;position:relative">
+                  <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(to right,transparent,var(--accent-secondary),transparent);opacity:0.5;border-radius:8px 8px 0 0"></div>
+                  <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;color:var(--accent-secondary);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border-strong)" data-i18n="server.add">添加服务器</div>
+                  <div class="login-field">
+                    <label data-i18n="server.name">服务器名称</label>
+                    <div class="input-line">
+                      <span class="material-symbols-outlined prefix" style="font-size:14px">label</span>
+                      <span class="placeholder-text">My Server</span>
+                    </div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:3fr 1fr;gap:12px;margin-bottom:12px">
+                    <div class="login-field" style="margin-bottom:0">
+                      <label data-i18n="auth.host">主机地址</label>
+                      <div class="input-line">
+                        <span class="prefix">&gt;</span>
+                        <span class="placeholder-text">192.168.1.1</span>
+                      </div>
+                    </div>
+                    <div class="login-field" style="margin-bottom:0">
+                      <label data-i18n="auth.port">端口</label>
+                      <div class="input-line">
+                        <span class="prefix">:</span>
+                        <span class="placeholder-text">22</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="login-field">
+                    <label data-i18n="auth.user">用户名</label>
+                    <div class="input-line">
+                      <span class="material-symbols-outlined prefix" style="font-size:14px">person</span>
+                      <span class="placeholder-text">root</span>
+                    </div>
+                  </div>
+                  <div class="login-field">
+                    <label data-i18n="auth.method">认证方式</label>
+                    <div class="auth-tabs">
+                      <span class="auth-tab active" data-i18n="common.password">密码</span>
+                      <span class="auth-tab" data-i18n="common.privateKey">私钥</span>
+                    </div>
+                    <div class="input-line" style="border-bottom:1px solid var(--border-strong);padding-bottom:6px">
+                      <span class="material-symbols-outlined prefix" style="font-size:14px">key</span>
+                      <span class="placeholder-text">••••••••</span>
+                    </div>
+                  </div>
+                  <div class="login-field">
+                    <label data-i18n="auth.regionHint">连接区域</label>
+                    <div class="input-line" style="border-bottom:1px solid var(--border-strong);padding-bottom:6px;justify-content:space-between">
+                      <span class="placeholder-text" data-i18n="region.auto">自动（保存时由系统推断）</span>
+                      <span class="material-symbols-outlined" style="font-size:12px;color:var(--text-muted)">expand_more</span>
+                    </div>
+                  </div>
+                  <button class="connect-btn" style="margin-top:12px">
+                    <span class="material-symbols-outlined" style="font-size:14px">save</span>
+                    <span data-i18n="server.save">保存服务器</span>
+                  </button>
+                </div>
+              </div>
+              <div class="us-footer">
+                <span>© <span data-current-year></span> CLOUD_SSH_TERMINAL</span>
+                <span data-i18n="common.documentation">文档</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal + SFTP (Bottom, Full Width) -->
+        <div class="preview-section col-terminal">
+          <div class="preview-label" data-i18n="preview.terminalSftp">终端与 SFTP</div>
+          <div class="preview-frame">
+            <div class="terminal-appbar">
+              <span class="terminal-appbar__brand">CloudSSH</span>
+              <div class="terminal-appbar__actions">
+                <select class="terminal-theme-select" aria-label="Theme">
+                  <option value="custom" data-i18n="editor.custom" disabled>自定义</option>
+                  <option value="standard-dark">Standard Dark</option>
+                  <option value="standard-light">Standard Light</option>
+                  <option value="cyberpunk" selected>Cyberpunk</option>
+                  <option value="liquid-glass">Liquid Glass</option>
+                </select>
+                <span class="material-symbols-outlined terminal-tool-icon">upload_file</span>
+                <span class="material-symbols-outlined terminal-tool-icon">folder_open</span>
+                <span class="material-symbols-outlined terminal-tool-icon">search</span>
+                <span class="material-symbols-outlined terminal-tool-icon">download</span>
+                <span class="material-symbols-outlined terminal-tool-icon">psychology</span>
+                <span class="material-symbols-outlined terminal-tool-icon">power_settings_new</span>
+              </div>
+            </div>
+            <!-- Tab Bar Preview -->
+            <div class="preview-tab-bar">
+              <div class="preview-tab-item active">
+                <span class="preview-tab-dot connected"></span>
+                <span class="tab-label">root@ubuntu</span>
+                <span class="material-symbols-outlined preview-tab-close" style="font-size:12px">close</span>
+              </div>
+              <div class="preview-tab-item">
+                <span class="preview-tab-dot connected"></span>
+                <span class="tab-label">Production</span>
+                <span class="material-symbols-outlined preview-tab-close" style="font-size:12px">close</span>
+              </div>
+              <div class="preview-tab-item disconnected">
+                <span class="preview-tab-dot disconnected"></span>
+                <span class="tab-label">10.0.0.5</span>
+                <span class="material-symbols-outlined preview-tab-close" style="font-size:12px">close</span>
+              </div>
+              <div class="preview-tab-new-btn">
+                <span class="material-symbols-outlined" style="font-size:12px">add</span>
+              </div>
+            </div>
+            <div class="terminal-sftp-preview">
+              <!-- Terminal Area -->
+              <div class="terminal-preview">
+                <div class="scanline"></div>
+                <div class="terminal-statusbar" style="display:flex;justify-content:space-between;">
+                  <div style="display:flex;gap:20px;">
+                    <span class="connected"><span class="dot-green"></span> <span data-i18n="terminal.connected">已连接</span></span>
+                    <span data-i18n-template="terminal.host" data-value="192.168.1.1">主机：192.168.1.1</span>
+                    <span data-i18n-template="terminal.user" data-value="root">用户：root</span>
+                    <span data-i18n-template="terminal.port" data-value="22">端口：22</span>
+                  </div>
+                  <div class="network-latency-preview">
+                    <span class="network-latency-item"><span class="network-quality-dot network-quality-good" aria-hidden="true"></span>CF-HKG: 34ms</span>
+                    <span class="network-latency-item"><span class="network-quality-dot network-quality-fair" aria-hidden="true"></span>RTT: 126ms</span>
+                  </div>
+                </div>
+                <div class="terminal-body">
+                  <div class="line green" data-i18n="terminal.wsSendingCredentials">[+] WebSocket 已连接，正在发送凭据…</div>
+                  <div class="line green" data-i18n="terminal.wsAuthenticating">[*] WebSocket 已连接，正在认证…</div>
+                  <div class="line green" data-i18n="terminal.authSuccess">[*] 认证成功</div>
+                  <div class="line white">Welcome to Ubuntu 22.04.3 LTS</div>
+                  <div class="line white"> </div>
+                  <div class="line"><span class="prompt">root@server</span><span class="white">:</span><span class="path">~</span><span class="white">$ ls -la</span></div>
+                  <div class="line white">drwxr-xr-x 5 root root 4096 Jan 15 10:23 .</div>
+                  <div class="line white">drwxr-xr-x 3 root root 4096 Jan 15 10:20 ..</div>
+                  <div class="line cyan">-rw-r--r-- 1 root root  220 Jan 15 10:20 .bashrc</div>
+                  <div class="line cyan">drwxr-xr-x 2 root root 4096 Jan 15 10:23 config</div>
+                  <div class="line cyan">-rwxr-xr-x 1 root root 1024 Jan 15 10:23 deploy.sh</div>
+                  <div class="line yellow">-rw-r--r-- 1 root root  512 Jan 15 10:22 README.md</div>
+                  <div class="line white"> </div>
+                  <div class="line"><span class="prompt">root@server</span><span class="white">:</span><span class="path">~</span><span class="white">$ </span><span class="cursor-block"></span></div>
+                </div>
+                <div class="ask-ai-selection-preview">
+                  <span class="material-symbols-outlined" aria-hidden="true">quick_phrases</span>
+                  <span data-i18n="terminal.askAISelection">询问 AI 助手</span>
+                </div>
+              </div>
+              <!-- SFTP Panel (Right Side) -->
+              <div class="sftp-preview">
+                <div class="sftp-header">
+                  <div class="title">
+                    <span class="material-symbols-outlined icon" style="font-variation-settings:'FILL' 1">folder_open</span>
+                    <span data-i18n="sftp.title">SFTP 文件管理器</span>
+                  </div>
+                  <span class="material-symbols-outlined close-icon">close</span>
+                </div>
+                <div class="sftp-toolbar">
+                  <span class="material-symbols-outlined nav-icon">arrow_back</span>
+                  <span class="material-symbols-outlined nav-icon">home</span>
+                  <span class="material-symbols-outlined nav-icon">refresh</span>
+                  <input class="path-input" value="/home/admin" readonly>
+                  <span class="material-symbols-outlined nav-icon" style="color:var(--accent)">arrow_forward</span>
+                </div>
+                <div class="sftp-actions">
+                  <button class="sftp-action-btn"><span class="material-symbols-outlined">upload_file</span><span data-i18n="sftp.uploadAction">上传文件</span></button>
+                  <button class="sftp-action-btn secondary"><span class="material-symbols-outlined">create_new_folder</span><span data-i18n="sftp.mkdirAction">新建文件夹</span></button>
+                  <button class="sftp-action-btn" style="opacity:0.3"><span class="material-symbols-outlined">download</span><span data-i18n="sftp.downloadAction">下载</span></button>
+                  <button class="sftp-action-btn" style="opacity:0.3;color:var(--error)"><span class="material-symbols-outlined">delete</span><span data-i18n="sftp.deleteAction">删除</span></button>
+                  <button class="sftp-action-btn" style="opacity:0.3;color:var(--on-surface-variant)"><span class="material-symbols-outlined">edit</span><span data-i18n="sftp.renameAction">重命名</span></button>
+                </div>
+                <div class="sftp-file-list">
+                  <div class="sftp-file-item">
+                    <span class="material-symbols-outlined file-icon dir" style="font-variation-settings:'FILL' 1">folder</span>
+                    <span class="file-name dir">.ssh</span>
+                    <span class="file-size">-</span>
+                    <span class="file-perms">drwx------</span>
+                    <span class="file-date">Jan 10 09:15</span>
+                  </div>
+                  <div class="sftp-file-item">
+                    <span class="material-symbols-outlined file-icon dir" style="font-variation-settings:'FILL' 1">folder</span>
+                    <span class="file-name dir">projects</span>
+                    <span class="file-size">-</span>
+                    <span class="file-perms">drwxr-xr-x</span>
+                    <span class="file-date">Jan 14 16:30</span>
+                  </div>
+                  <div class="sftp-file-item selected">
+                    <span class="material-symbols-outlined file-icon dir" style="font-variation-settings:'FILL' 1">folder</span>
+                    <span class="file-name dir">config</span>
+                    <span class="file-size">-</span>
+                    <span class="file-perms">drwxr-xr-x</span>
+                    <span class="file-date">Jan 15 10:23</span>
+                  </div>
+                  <div class="sftp-file-item">
+                    <span class="material-symbols-outlined file-icon file">draft</span>
+                    <span class="file-name">.bashrc</span>
+                    <span class="file-size">4.2 KB</span>
+                    <span class="file-perms">-rw-r--r--</span>
+                    <span class="file-date">Jan 10 09:00</span>
+                  </div>
+                  <div class="sftp-file-item">
+                    <span class="material-symbols-outlined file-icon file">terminal</span>
+                    <span class="file-name">deploy.sh</span>
+                    <span class="file-size">1.0 KB</span>
+                    <span class="file-perms">-rwxr-xr-x</span>
+                    <span class="file-date">Jan 15 10:23</span>
+                  </div>
+                  <div class="sftp-file-item">
+                    <span class="material-symbols-outlined file-icon file">description</span>
+                    <span class="file-name">README.md</span>
+                    <span class="file-size">512 B</span>
+                    <span class="file-perms">-rw-r--r--</span>
+                    <span class="file-date">Jan 12 14:20</span>
+                  </div>
+                  <div class="sftp-file-item">
+                    <span class="material-symbols-outlined file-icon link">link</span>
+                    <span class="file-name">logs -> /var/log/app</span>
+                    <span class="file-size">-</span>
+                    <span class="file-perms">lrwxrwxrwx</span>
+                    <span class="file-date">Jan 08 11:00</span>
+                  </div>
+                </div>
+                <div class="sftp-statusbar">
+                  <span data-i18n="sftp.ready">就绪</span>
+                  <span data-i18n="sftp.count">2 个目录，4 个文件</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <!-- AI Agent Panel (Below, Full Width) -->
+      <div class="preview-section col-agent">
+        <div class="preview-label" data-i18n="preview.agent">AI Agent 面板（思考进度）</div>
+        <div class="preview-frame">
+          <div class="agent-preview">
+            <!-- Agent Panel Header -->
+            <div class="agent-header">
+              <span class="agent-header-title" data-i18n="agent.title">AI Agent 助手</span>
+              <span class="material-symbols-outlined agent-close-icon">close</span>
+            </div>
+            <!-- Message List -->
+            <div class="agent-messages">
+              <!-- User Message -->
+              <div class="agent-msg-user">
+                <span class="agent-msg-text" data-i18n="agent.sampleRequest">帮我检查服务器的配置信息</span>
+                <span class="material-symbols-outlined agent-icon-user" style="font-variation-settings:'FILL' 1">person</span>
+              </div>
+              <!-- Thinking Process Container (Collapsed) -->
+              <div class="tp-container">
+                <div class="tp-header">
+                  <span class="material-symbols-outlined tp-chevron">expand_more</span>
+                  <span class="material-symbols-outlined tp-icon" style="font-variation-settings:'FILL' 1">check_circle</span>
+                  <span class="tp-status-text" data-i18n="agent.completedSteps">已完成 5 个步骤</span>
+                </div>
+              </div>
+              <!-- Agent Response (Markdown) -->
+              <div class="agent-msg-agent">
+                <span class="material-symbols-outlined agent-icon-bot" style="font-variation-settings:'FILL' 1">smart_toy</span>
+                <div class="agent-response-body">
+                  <h3 data-i18n="agent.sampleTitle">服务器配置信息汇总</h3>
+                  <table class="agent-table">
+                    <tr><th data-i18n="agent.item">项目</th><th data-i18n="agent.value">值</th></tr>
+                    <tr><td data-i18n="agent.os">操作系统</td><td>Ubuntu 24.04.4 LTS</td></tr>
+                    <tr><td data-i18n="agent.kernel">内核版本</td><td>Linux 6.8.0 x86_64</td></tr>
+                    <tr><td>CPU</td><td>1 vCPU @ 2494 MHz</td></tr>
+                    <tr><td data-i18n="agent.memory">内存</td><td>512 MiB (45% used)</td></tr>
+                  </table>
+                  <p data-i18n="agent.sampleAdvice">建议先检查服务状态：</p>
+                  <div class="agent-md-code-block">
+                    <div class="agent-md-code-toolbar">
+                      <span class="agent-md-lang">bash</span>
+                      <span class="agent-md-code-meta" data-i18n-template="agent.codeTarget" data-value="Production · root@192.168.1.10:22">目标：Production · root@192.168.1.10:22</span>
+                      <div class="agent-md-code-actions">
+                        <button class="agent-md-code-action" type="button">
+                          <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+                          <span data-i18n="agent.codeCopy">复制</span>
+                        </button>
+                        <button class="agent-md-code-action" type="button">
+                          <span class="material-symbols-outlined" aria-hidden="true">input</span>
+                          <span data-i18n="agent.codeFill">填入终端</span>
+                        </button>
+                      </div>
+                    </div>
+                    <pre class="agent-md-pre"><code>systemctl status nginx</code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Input Area -->
+            <div class="agent-input-bar">
+              <textarea class="agent-input" data-i18n-placeholder="agent.placeholder" placeholder="描述你希望 Agent 完成的任务…" readonly></textarea>
+              <button class="agent-send-btn">
+                <span class="material-symbols-outlined" style="font-size:14px">arrow_upward</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="import-input" accept=".json">
+<div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+
+<script>
+const TRANSLATIONS = {
+  'zh-CN': {
+    'page.title': 'CloudSSH 主题在线编辑器',
+    'language.zhCN': '简体中文',
+    'language.zhTW': '繁體中文',
+    'language.enUS': 'English',
+    'language.switchTo': '切换到{language}',
+    'editor.title': '主题在线编辑器',
+    'editor.import': '导入',
+    'editor.export': '导出',
+    'editor.importTitle': '导入主题 JSON',
+    'editor.exportTitle': '导出主题 JSON',
+    'editor.presets': '预设主题',
+    'editor.custom': '自定义',
+    'preview.login': '匿名连接',
+    'preview.userSpace': '用户空间',
+    'preview.modal': '（弹窗预览）',
+    'preview.terminalSftp': '终端与 SFTP',
+    'preview.agent': 'AI Agent 面板（思考进度）',
+    'common.optional': '可选',
+    'common.password': '密码',
+    'common.privateKey': '私钥',
+    'common.connect': '连接',
+    'common.documentation': '文档',
+    'auth.connectionParameters': '连接参数',
+    'auth.host': '主机地址',
+    'auth.port': '端口',
+    'auth.user': '用户名',
+    'auth.method': '认证方式',
+    'auth.regionHint': '连接区域',
+    'auth.remember': '记住连接信息',
+    'auth.execute': '建立连接',
+    'auth.statusOffline': '状态：离线',
+    'auth.recent': '最近连接',
+    'region.auto': '自动（保存时由系统推断）',
+    'server.list': '服务器列表',
+    'server.manage': '管理你的 SSH 连接',
+    'server.add': '添加服务器',
+    'server.searchPlaceholder': '按名称、主机或用户名搜索',
+    'server.hostLabel': '主机',
+    'server.userLabel': '用户',
+    'server.regionLabel': '区域',
+    'server.regionAuto': '自动',
+    'server.regionManual': '手动',
+    'server.name': '服务器名称',
+    'server.save': '保存服务器',
+    'terminal.connected': '已连接',
+    'terminal.host': '主机：{value}',
+    'terminal.user': '用户：{value}',
+    'terminal.port': '端口：{value}',
+    'terminal.wsSendingCredentials': '[+] WebSocket 已连接，正在发送凭据…',
+    'terminal.wsAuthenticating': '[*] WebSocket 已连接，正在认证…',
+    'terminal.authSuccess': '[*] 认证成功',
+    'terminal.askAISelection': '询问 AI 助手',
+    'sftp.title': 'SFTP 文件管理器',
+    'sftp.uploadAction': '上传文件',
+    'sftp.mkdirAction': '新建文件夹',
+    'sftp.downloadAction': '下载',
+    'sftp.deleteAction': '删除',
+    'sftp.renameAction': '重命名',
+    'sftp.ready': '就绪',
+    'sftp.count': '2 个目录，4 个文件',
+    'agent.title': 'AI Agent 助手',
+    'agent.sampleRequest': '帮我检查服务器的配置信息',
+    'agent.completedSteps': '已完成 5 个步骤',
+    'agent.sampleTitle': '服务器配置信息汇总',
+    'agent.item': '项目',
+    'agent.value': '值',
+    'agent.os': '操作系统',
+    'agent.kernel': '内核版本',
+    'agent.memory': '内存',
+    'agent.sampleAdvice': '建议先检查服务状态：',
+    'agent.codeTarget': '目标：{value}',
+    'agent.codeCopy': '复制',
+    'agent.codeFill': '填入终端',
+    'agent.placeholder': '描述你希望 Agent 完成的任务…',
+    'feedback.imported': '主题导入成功。',
+    'feedback.exported': '主题 JSON 已导出。',
+    'feedback.missingUi': '主题文件不包含有效的颜色、终端或外观配置。',
+    'feedback.invalidJson': '文件不是有效的主题 JSON。',
+    'feedback.fileTooLarge': '主题文件不能超过 64 KiB。',
+    'feedback.invalidColor': '请先修正标红的无效颜色值。',
+    'group.basic': '主题信息',
+    'group.appearance': '整体外观',
+    'group.componentStyles': '组件样式',
+    'group.themeV3Background': '背景层（V3）',
+    'group.themeV3Effects': '效果（V3）',
+    'group.themeV3Typography': '版式缩放（V3）',
+    'background.type': '背景类型',
+    'background.angle': '渐变角度',
+    'background.scrim': '读性遮罩',
+    'background.animation': '背景动画',
+    'background.stop1': '停靠点 1',
+    'background.stop2': '停靠点 2',
+    'background.stop3': '停靠点 3',
+    'background.stop4': '停靠点 4',
+    'effects.scanline': '扫描线',
+    'effects.flicker': '闪烁',
+    'effects.glow': '辉光',
+    'effects.noise': '噪点',
+    'typography.fontScale': '字号缩放',
+    'typography.radiusScale': '圆角缩放',
+    'appearance.name': '主题名称',
+    'appearance.colorScheme': '明暗模式',
+    'appearance.style': '整体风格',
+    'appearance.shape': '形状',
+    'appearance.density': '密度',
+    'appearance.font': '字体',
+    'appearance.shadow': '阴影',
+    'appearance.motion': '动效',
+    'appearance.blur': '表面模糊',
+    'appearance.button': '按钮',
+    'appearance.input': '输入框',
+    'appearance.card': '卡片',
+    'appearance.tabs': '标签页',
+    'option.dark': '深色',
+    'option.light': '浅色',
+    'option.standard': '标准',
+    'option.cyberpunk': '赛博朋克',
+    'option.soft': '柔和',
+    'option.liquid': '液态玻璃',
+    'option.square': '方正',
+    'option.rounded': '圆角',
+    'option.compact': '紧凑',
+    'option.comfortable': '舒适',
+    'option.spacious': '宽松',
+    'option.mono': '等宽字体',
+    'option.system': '系统字体',
+    'option.none': '无',
+    'option.subtle': '轻微',
+    'option.elevated': '悬浮',
+    'option.solid': '纯色',
+    'option.linear': '线性渐变',
+    'option.radial': '径向渐变',
+    'option.mesh': '网格渐变',
+    'option.drift': '缓慢漂移',
+    'option.reduced': '精简',
+    'option.full': '完整',
+    'option.outline': '描边',
+    'option.solid': '实心',
+    'option.underline': '下划线',
+    'option.boxed': '方框',
+    'option.outlined': '描边',
+    'option.flat': '扁平',
+    'option.segmented': '分段',
+    'group.backgrounds': '背景颜色',
+    'group.text': '文本颜色',
+    'group.accents': '强调颜色',
+    'group.borders': '边框',
+    'group.error': '错误状态',
+    'group.components': '组件',
+    'group.agent': 'AI Agent',
+    'group.effects': '视觉效果',
+    'variable.bg': '页面背景',
+    'variable.bgSurface': '卡片 / 表面',
+    'variable.bgElevated': '浮层表面',
+    'variable.bgTerminal': '终端背景',
+    'variable.text': '主要文本',
+    'variable.textMuted': '次要文本',
+    'variable.textDim': '弱化文本',
+    'variable.accent': '主要强调色',
+    'variable.accentSecondary': '次要强调色',
+    'variable.accentSecondaryLight': '次要浅色',
+    'variable.onAccent': '强调色上的文本',
+    'variable.border': '边框',
+    'variable.borderStrong': '强边框',
+    'variable.error': '错误文本',
+    'variable.errorBg': '错误背景',
+    'variable.surfaceDot': '状态点',
+    'variable.scrollbarTrack': '滚动条轨道',
+    'variable.scrollbarThumb': '滚动条滑块',
+    'variable.scrollbarThumbHover': '滚动条悬停',
+    'variable.agentUser': '用户消息',
+    'variable.agentBot': 'Agent 消息',
+    'variable.scanline': '扫描线叠层',
+    'variable.accentGlow': '强调色光晕',
+    'variable.accentBg': '强调色背景',
+    'variable.modalOverlay': '弹窗遮罩',
+    'variable.onSurface': '表面文本',
+    'variable.onSurfaceVariant': '表面次要文本',
+  },
+  'en-US': {
+    'page.title': 'CloudSSH Theme Editor',
+    'language.zhCN': '简体中文',
+    'language.zhTW': '繁體中文',
+    'language.enUS': 'English',
+    'language.switchTo': 'Switch to {language}',
+    'editor.title': 'THEME EDITOR',
+    'editor.import': 'IMPORT',
+    'editor.export': 'EXPORT',
+    'editor.importTitle': 'Import theme JSON',
+    'editor.exportTitle': 'Export theme JSON',
+    'editor.presets': 'PRESETS',
+    'editor.custom': 'CUSTOM',
+    'preview.login': 'LOGIN PAGE',
+    'preview.userSpace': 'USER SPACE',
+    'preview.modal': '(MODAL PREVIEW)',
+    'preview.terminalSftp': 'TERMINAL + SFTP',
+    'preview.agent': 'AI AGENT PANEL (THINKING PROGRESS)',
+    'common.optional': 'Optional',
+    'common.password': 'PASSWORD',
+    'common.privateKey': 'PRIVATE KEY',
+    'common.connect': 'CONNECT',
+    'common.documentation': 'Documentation',
+    'auth.connectionParameters': 'CONNECTION PARAMETERS',
+    'auth.host': 'HOST ADDRESS',
+    'auth.port': 'PORT',
+    'auth.user': 'USERNAME',
+    'auth.method': 'AUTHENTICATION METHOD',
+    'auth.regionHint': 'CONNECTION REGION',
+    'auth.remember': 'REMEMBER CONNECTION',
+    'auth.execute': 'CONNECT',
+    'auth.statusOffline': 'STATUS: OFFLINE',
+    'auth.recent': 'RECENT CONNECTIONS',
+    'region.auto': 'Auto (detected when saved)',
+    'server.list': 'SERVER LIST',
+    'server.manage': 'Manage your SSH connections',
+    'server.add': 'ADD SERVER',
+    'server.searchPlaceholder': 'Search by name, host, or username',
+    'server.hostLabel': 'HOST',
+    'server.userLabel': 'USER',
+    'server.regionLabel': 'REGION',
+    'server.regionAuto': 'AUTO',
+    'server.regionManual': 'MANUAL',
+    'server.name': 'SERVER NAME',
+    'server.save': 'SAVE SERVER',
+    'terminal.connected': 'Connected',
+    'terminal.host': 'Host: {value}',
+    'terminal.user': 'User: {value}',
+    'terminal.port': 'Port: {value}',
+    'terminal.wsSendingCredentials': '[+] WebSocket connected, sending credentials…',
+    'terminal.wsAuthenticating': '[*] WebSocket connected, authenticating…',
+    'terminal.authSuccess': '[*] Authentication successful',
+    'terminal.askAISelection': 'Ask AI assistant',
+    'sftp.title': 'SFTP FILE MANAGER',
+    'sftp.uploadAction': 'UPLOAD',
+    'sftp.mkdirAction': 'MKDIR',
+    'sftp.downloadAction': 'DOWNLOAD',
+    'sftp.deleteAction': 'DELETE',
+    'sftp.renameAction': 'RENAME',
+    'sftp.ready': 'Ready',
+    'sftp.count': '2 dirs, 4 files',
+    'agent.title': 'AI AGENT ASSISTANT',
+    'agent.sampleRequest': 'Check the server configuration for me',
+    'agent.completedSteps': 'Completed 5 steps',
+    'agent.sampleTitle': 'Server configuration summary',
+    'agent.item': 'Item',
+    'agent.value': 'Value',
+    'agent.os': 'Operating system',
+    'agent.kernel': 'Kernel',
+    'agent.memory': 'Memory',
+    'agent.sampleAdvice': 'Check the service status first:',
+    'agent.codeTarget': 'Target: {value}',
+    'agent.codeCopy': 'Copy',
+    'agent.codeFill': 'Fill terminal',
+    'agent.placeholder': 'Describe what you want the Agent to do…',
+    'feedback.imported': 'Theme imported.',
+    'feedback.exported': 'Theme JSON exported.',
+    'feedback.missingUi': 'The theme file has no valid color, terminal, or appearance settings.',
+    'feedback.invalidJson': 'The file is not valid theme JSON.',
+    'feedback.fileTooLarge': 'Theme files must not exceed 64 KiB.',
+    'feedback.invalidColor': 'Fix the invalid color values highlighted in red first.',
+    'group.basic': 'THEME INFORMATION',
+    'group.appearance': 'APPEARANCE',
+    'group.componentStyles': 'COMPONENT STYLES',
+    'group.themeV3Background': 'BACKGROUND (V3)',
+    'group.themeV3Effects': 'EFFECTS (V3)',
+    'group.themeV3Typography': 'TYPOGRAPHY SCALE (V3)',
+    'background.type': 'Background type',
+    'background.angle': 'Gradient angle',
+    'background.scrim': 'Readability scrim',
+    'background.animation': 'Background animation',
+    'background.stop1': 'Stop 1',
+    'background.stop2': 'Stop 2',
+    'background.stop3': 'Stop 3',
+    'background.stop4': 'Stop 4',
+    'effects.scanline': 'Scanline',
+    'effects.flicker': 'Flicker',
+    'effects.glow': 'Glow',
+    'effects.noise': 'Noise',
+    'typography.fontScale': 'Font scale',
+    'typography.radiusScale': 'Radius scale',
+    'appearance.name': 'Theme name',
+    'appearance.colorScheme': 'Color scheme',
+    'appearance.style': 'Style',
+    'appearance.shape': 'Shape',
+    'appearance.density': 'Density',
+    'appearance.font': 'Font',
+    'appearance.shadow': 'Shadow',
+    'appearance.motion': 'Motion',
+    'appearance.blur': 'Surface blur',
+    'appearance.button': 'Button',
+    'appearance.input': 'Input',
+    'appearance.card': 'Card',
+    'appearance.tabs': 'Tabs',
+    'option.dark': 'Dark',
+    'option.light': 'Light',
+    'option.standard': 'Standard',
+    'option.cyberpunk': 'Cyberpunk',
+    'option.soft': 'Soft',
+    'option.liquid': 'Liquid Glass',
+    'option.square': 'Square',
+    'option.rounded': 'Rounded',
+    'option.compact': 'Compact',
+    'option.comfortable': 'Comfortable',
+    'option.spacious': 'Spacious',
+    'option.mono': 'Monospace',
+    'option.system': 'System',
+    'option.none': 'None',
+    'option.subtle': 'Subtle',
+    'option.elevated': 'Elevated',
+    'option.solid': 'Solid',
+    'option.linear': 'Linear',
+    'option.radial': 'Radial',
+    'option.mesh': 'Mesh',
+    'option.drift': 'Drift',
+    'option.reduced': 'Reduced',
+    'option.full': 'Full',
+    'option.outline': 'Outline',
+    'option.solid': 'Solid',
+    'option.underline': 'Underline',
+    'option.boxed': 'Boxed',
+    'option.outlined': 'Outlined',
+    'option.flat': 'Flat',
+    'option.segmented': 'Segmented',
+    'group.backgrounds': 'BACKGROUNDS',
+    'group.text': 'TEXT COLORS',
+    'group.accents': 'ACCENT COLORS',
+    'group.borders': 'BORDERS',
+    'group.error': 'ERROR',
+    'group.components': 'COMPONENTS',
+    'group.agent': 'AI AGENT',
+    'group.effects': 'EFFECTS',
+    'variable.bg': 'Page Background',
+    'variable.bgSurface': 'Card / Surface',
+    'variable.bgElevated': 'Elevated Surface',
+    'variable.bgTerminal': 'Terminal Background',
+    'variable.text': 'Primary Text',
+    'variable.textMuted': 'Muted Text',
+    'variable.textDim': 'Dim Text',
+    'variable.accent': 'Primary Accent',
+    'variable.accentSecondary': 'Secondary Accent',
+    'variable.accentSecondaryLight': 'Secondary Light',
+    'variable.onAccent': 'Text on Accent',
+    'variable.border': 'Border',
+    'variable.borderStrong': 'Strong Border',
+    'variable.error': 'Error Text',
+    'variable.errorBg': 'Error Background',
+    'variable.surfaceDot': 'Status Dot',
+    'variable.scrollbarTrack': 'Scrollbar Track',
+    'variable.scrollbarThumb': 'Scrollbar Thumb',
+    'variable.scrollbarThumbHover': 'Scrollbar Hover',
+    'variable.agentUser': 'User Message',
+    'variable.agentBot': 'Agent Message',
+    'variable.scanline': 'Scanline Overlay',
+    'variable.accentGlow': 'Accent Glow',
+    'variable.accentBg': 'Accent Background',
+    'variable.modalOverlay': 'Modal Overlay',
+    'variable.onSurface': 'Surface Text',
+    'variable.onSurfaceVariant': 'Surface Text Variant',
+  },
+
+  'zh-TW': {
+    'page.title': 'CloudSSH 主題線上編輯器',
+    'language.zhCN': '簡體中文',
+    'language.zhTW': '繁體中文',
+    'language.enUS': 'English',
+    'language.switchTo': '切換到{language}',
+    'editor.title': '主題線上編輯器',
+    'editor.import': '匯入',
+    'editor.export': '匯出',
+    'editor.importTitle': '匯入主題 JSON',
+    'editor.exportTitle': '匯出主題 JSON',
+    'editor.presets': '預設主題',
+    'editor.custom': '自定義',
+    'preview.login': '匿名連線',
+    'preview.userSpace': '使用者空間',
+    'preview.modal': '（彈窗預覽）',
+    'preview.terminalSftp': '終端與 SFTP',
+    'preview.agent': 'AI Agent 面板（思考進度）',
+    'common.optional': '可選',
+    'common.password': '密碼',
+    'common.privateKey': '私鑰',
+    'common.connect': '連線',
+    'common.documentation': '文件',
+    'auth.connectionParameters': '連線參數',
+    'auth.host': '主機位址',
+    'auth.port': '連接埠',
+    'auth.user': '使用者名稱',
+    'auth.method': '驗證方式',
+    'auth.regionHint': '連線區域',
+    'auth.remember': '記住連線資訊',
+    'auth.execute': '建立連線',
+    'auth.statusOffline': '狀態：離線',
+    'auth.recent': '最近連線',
+    'region.auto': '自動（儲存時由系統推斷）',
+    'server.list': '伺服器列表',
+    'server.manage': '管理你的 SSH 連線',
+    'server.add': '新增伺服器',
+    'server.searchPlaceholder': '按名稱、主機或使用者名稱搜尋',
+    'server.hostLabel': '主機',
+    'server.userLabel': '使用者',
+    'server.regionLabel': '區域',
+    'server.regionAuto': '自動',
+    'server.regionManual': '手動',
+    'server.name': '伺服器名稱',
+    'server.save': '儲存伺服器',
+    'terminal.connected': '已連線',
+    'terminal.host': '主機：{value}',
+    'terminal.user': '使用者：{value}',
+    'terminal.port': '連接埠：{value}',
+    'terminal.wsSendingCredentials': '[+] WebSocket 已連線，正在傳送憑據…',
+    'terminal.wsAuthenticating': '[*] WebSocket 已連線，正在驗證…',
+    'terminal.authSuccess': '[*] 驗證成功',
+    'terminal.askAISelection': '詢問 AI 助手',
+    'sftp.title': 'SFTP 檔案管理器',
+    'sftp.uploadAction': '上傳檔案',
+    'sftp.mkdirAction': '新增資料夾',
+    'sftp.downloadAction': '下載',
+    'sftp.deleteAction': '刪除',
+    'sftp.renameAction': '重新命名',
+    'sftp.ready': '就緒',
+    'sftp.count': '2 個目錄，4 個檔案',
+    'agent.title': 'AI Agent 助手',
+    'agent.sampleRequest': '幫我檢查伺服器的設定資訊',
+    'agent.completedSteps': '已完成 5 個步驟',
+    'agent.sampleTitle': '伺服器設定資訊彙總',
+    'agent.item': '項目',
+    'agent.value': '值',
+    'agent.os': '作業系統',
+    'agent.kernel': '核心版本',
+    'agent.memory': '記憶體',
+    'agent.sampleAdvice': '建議先檢查服務狀態：',
+    'agent.codeTarget': '目標：{value}',
+    'agent.codeCopy': '複製',
+    'agent.codeFill': '填入終端',
+    'agent.placeholder': '描述你希望 Agent 完成的任務…',
+    'feedback.imported': '主題匯入成功。',
+    'feedback.exported': '主題 JSON 已匯出。',
+    'feedback.missingUi': '主題檔案不包含有效的顏色、終端或外觀設定。',
+    'feedback.invalidJson': '檔案不是有效的主題 JSON。',
+    'feedback.fileTooLarge': '主題檔案不能超過 64 KiB。',
+    'feedback.invalidColor': '請先修正標紅的無效顏色值。',
+    'group.basic': '主題資訊',
+    'group.appearance': '整體外觀',
+    'group.componentStyles': '元件樣式',
+    'group.themeV3Background': '背景層（V3）',
+    'group.themeV3Effects': '效果（V3）',
+    'group.themeV3Typography': '版式縮放（V3）',
+    'background.type': '背景型別',
+    'background.angle': '漸變角度',
+    'background.scrim': '讀性遮罩',
+    'background.animation': '背景動畫',
+    'background.stop1': '停靠點 1',
+    'background.stop2': '停靠點 2',
+    'background.stop3': '停靠點 3',
+    'background.stop4': '停靠點 4',
+    'effects.scanline': '掃描線',
+    'effects.flicker': '閃爍',
+    'effects.glow': '輝光',
+    'effects.noise': '噪點',
+    'typography.fontScale': '字號縮放',
+    'typography.radiusScale': '圓角縮放',
+    'appearance.name': '主題名稱',
+    'appearance.colorScheme': '明暗模式',
+    'appearance.style': '整體風格',
+    'appearance.shape': '形狀',
+    'appearance.density': '密度',
+    'appearance.font': '字型',
+    'appearance.shadow': '陰影',
+    'appearance.motion': '動效',
+    'appearance.blur': '表面模糊',
+    'appearance.button': '按鈕',
+    'appearance.input': '輸入框',
+    'appearance.card': '卡片',
+    'appearance.tabs': '標籤頁',
+    'option.dark': '深色',
+    'option.light': '淺色',
+    'option.standard': '標準',
+    'option.cyberpunk': '賽博朋克',
+    'option.soft': '柔和',
+    'option.liquid': '液態玻璃',
+    'option.square': '方正',
+    'option.rounded': '圓角',
+    'option.compact': '緊湊',
+    'option.comfortable': '舒適',
+    'option.spacious': '寬鬆',
+    'option.mono': '等寬字型',
+    'option.system': '系統字型',
+    'option.none': '無',
+    'option.subtle': '輕微',
+    'option.elevated': '懸浮',
+    'option.solid': '實心',
+    'option.linear': '線性漸變',
+    'option.radial': '徑向漸變',
+    'option.mesh': '網格漸變',
+    'option.drift': '緩慢漂移',
+    'option.reduced': '精簡',
+    'option.full': '完整',
+    'option.outline': '描邊',
+    'option.underline': '下劃線',
+    'option.boxed': '方框',
+    'option.outlined': '描邊',
+    'option.flat': '扁平',
+    'option.segmented': '分段',
+    'group.backgrounds': '背景顏色',
+    'group.text': '文字顏色',
+    'group.accents': '強調顏色',
+    'group.borders': '邊框',
+    'group.error': '錯誤狀態',
+    'group.components': '元件',
+    'group.agent': 'AI Agent',
+    'group.effects': '視覺效果',
+    'variable.bg': '頁面背景',
+    'variable.bgSurface': '卡片 / 表面',
+    'variable.bgElevated': '浮層表面',
+    'variable.bgTerminal': '終端背景',
+    'variable.text': '主要文字',
+    'variable.textMuted': '次要文字',
+    'variable.textDim': '弱化文字',
+    'variable.accent': '主要強調色',
+    'variable.accentSecondary': '次要強調色',
+    'variable.accentSecondaryLight': '次要淺色',
+    'variable.onAccent': '強調色上的文字',
+    'variable.border': '邊框',
+    'variable.borderStrong': '強邊框',
+    'variable.error': '錯誤文字',
+    'variable.errorBg': '錯誤背景',
+    'variable.surfaceDot': '狀態點',
+    'variable.scrollbarTrack': '捲軸軌道',
+    'variable.scrollbarThumb': '捲軸滑塊',
+    'variable.scrollbarThumbHover': '捲軸懸停',
+    'variable.agentUser': '使用者訊息',
+    'variable.agentBot': 'Agent 訊息',
+    'variable.scanline': '掃描線疊層',
+    'variable.accentGlow': '強調色光暈',
+    'variable.accentBg': '強調色背景',
+    'variable.modalOverlay': '彈窗遮罩',
+    'variable.onSurface': '表面文字',
+    'variable.onSurfaceVariant': '表面次要文字',
+  },
+};
+
+const LOCALE_STORAGE_KEY = 'cloudssh_locale';
+let locale = 'zh-CN';
+
+function normalizeLocale(value) {
+  if (!value) return null;
+  const normalized = String(value).replace(/_/g, '-').toLowerCase();
+  if (
+    normalized === 'zh-tw' ||
+    normalized.startsWith('zh-tw-') ||
+    normalized === 'zh-hk' ||
+    normalized.startsWith('zh-hk-') ||
+    normalized === 'zh-mo' ||
+    normalized.startsWith('zh-mo-') ||
+    normalized === 'zh-hant' ||
+    normalized.startsWith('zh-hant-')
+  ) return 'zh-TW';
+  if (normalized === 'zh' || normalized.startsWith('zh-')) return 'zh-CN';
+  if (normalized === 'en' || normalized.startsWith('en-')) return 'en-US';
+  return null;
+}
+
+function t(key, params = {}) {
+  const template = TRANSLATIONS[locale][key] || TRANSLATIONS['zh-CN'][key] || key;
+  return template.replace(/\{(\w+)\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match
+  );
+}
+
+function resolveInitialLocale() {
+  let stored = null;
+  try { stored = localStorage.getItem(LOCALE_STORAGE_KEY); } catch { /* storage may be unavailable */ }
+  return normalizeLocale(new URLSearchParams(window.location.search).get('lang'))
+    || normalizeLocale(stored)
+    || (navigator.languages || [navigator.language]).map(normalizeLocale).find(Boolean)
+    || 'zh-CN';
+}
+
+function translateDocument() {
+  document.documentElement.lang = locale;
+  document.title = t('page.title');
+  document.querySelectorAll('[data-i18n]').forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach((element) => {
+    element.title = t(element.dataset.i18nTitle);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
+    element.placeholder = t(element.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-template]').forEach((element) => {
+    element.textContent = t(element.dataset.i18nTemplate, { value: element.dataset.value || '' });
+  });
+
+  const alternateLocale = locale === 'zh-CN' ? 'zh-TW' : locale === 'zh-TW' ? 'en-US' : 'zh-CN';
+  const alternateKey = alternateLocale === 'zh-CN' ? 'zhCN' : alternateLocale === 'zh-TW' ? 'zhTW' : 'enUS';
+  const alternateLabel = TRANSLATIONS[alternateLocale]['language.' + alternateKey];
+  const languageButton = document.getElementById('language-toggle');
+  document.getElementById('language-toggle-label').textContent = alternateLabel;
+  languageButton.title = t('language.switchTo', { language: alternateLabel });
+  languageButton.setAttribute('aria-label', languageButton.title);
+  document.querySelectorAll('[data-language-preview-label]').forEach((element) => {
+    element.textContent = alternateLabel;
+  });
+}
+
+function setLocale(nextLocale, persist = true) {
+  locale = nextLocale;
+  if (persist) {
+    try { localStorage.setItem(LOCALE_STORAGE_KEY, locale); } catch { /* storage may be unavailable */ }
+  }
+  translateDocument();
+  if (Object.keys(theme).length) renderControls();
+}
+
+function showToast(messageKey, type = 'success') {
+  const region = document.getElementById('toast-region');
+  region.innerHTML = '';
+  const toast = document.createElement('div');
+  toast.className = `editor-toast${type === 'error' ? ' error' : ''}`;
+  toast.innerHTML = `<span class="material-symbols-outlined">${type === 'error' ? 'error' : 'check_circle'}</span><span></span>`;
+  toast.querySelector('span:last-child').textContent = t(messageKey);
+  region.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 3200);
+}
+
+const PRESETS = /* THEME_PRESETS_START */ {
+  "standard-dark": {
+    "name": "Standard Dark",
+    "colorScheme": "dark",
+    "appearance": {
+      "style": "standard",
+      "shape": "rounded",
+      "density": "comfortable",
+      "font": "system",
+      "shadow": "subtle",
+      "motion": "reduced",
+      "blur": "subtle",
+      "components": {
+        "button": "solid",
+        "input": "boxed",
+        "card": "outlined",
+        "tabs": "underline"
+      }
+    },
+    "terminal": {
+      "background": "#0b0e14",
+      "foreground": "#d6deeb",
+      "cursor": "#58a6ff",
+      "cursorAccent": "#0b0e14",
+      "selectionBackground": "#264f78",
+      "selectionInactiveBackground": "#1f3a56",
+      "black": "#0d1117",
+      "red": "#ff7b72",
+      "green": "#3fb950",
+      "yellow": "#d29922",
+      "blue": "#58a6ff",
+      "magenta": "#bc8cff",
+      "cyan": "#39c5cf",
+      "white": "#b1bac4",
+      "brightBlack": "#6e7681",
+      "brightRed": "#ffa198",
+      "brightGreen": "#56d364",
+      "brightYellow": "#e3b341",
+      "brightBlue": "#79c0ff",
+      "brightMagenta": "#d2a8ff",
+      "brightCyan": "#56d4dd",
+      "brightWhite": "#f0f6fc"
+    },
+    "ui": {
+      "--bg": "#0f1115",
+      "--bg-surface": "#161a22",
+      "--bg-elevated": "#1c222d",
+      "--bg-terminal": "#0b0e14",
+      "--text": "#e6edf3",
+      "--text-muted": "#9ba7b4",
+      "--text-dim": "#7d8590",
+      "--accent": "#58a6ff",
+      "--accent-secondary": "#79c0ff",
+      "--accent-secondary-light": "#a5d6ff",
+      "--border": "#30363d",
+      "--border-strong": "#484f58",
+      "--error": "#ff7b72",
+      "--error-bg": "#3d1418",
+      "--on-accent": "#07111f",
+      "--surface-dot": "#30363d",
+      "--scrollbar-track": "rgba(22, 26, 34, 0.7)",
+      "--scrollbar-thumb": "rgba(155, 167, 180, 0.35)",
+      "--scrollbar-thumb-hover": "rgba(155, 167, 180, 0.55)",
+      "--scanline-tint": "transparent",
+      "--accent-glow": "rgba(88, 166, 255, 0.08)",
+      "--accent-bg": "rgba(88, 166, 255, 0.1)",
+      "--modal-overlay": "rgba(0, 0, 0, 0.72)",
+      "--on-surface": "#e6edf3",
+      "--on-surface-variant": "#9ba7b4",
+      "--agent-user-color": "#58a6ff",
+      "--agent-agent-color": "#79c0ff"
+    }
+  },
+  "standard-light": {
+    "name": "Standard Light",
+    "colorScheme": "light",
+    "appearance": {
+      "style": "standard",
+      "shape": "rounded",
+      "density": "comfortable",
+      "font": "system",
+      "shadow": "subtle",
+      "motion": "reduced",
+      "blur": "subtle",
+      "components": {
+        "button": "solid",
+        "input": "boxed",
+        "card": "outlined",
+        "tabs": "underline"
+      }
+    },
+    "terminal": {
+      "background": "#ffffff",
+      "foreground": "#24292f",
+      "cursor": "#0969da",
+      "cursorAccent": "#ffffff",
+      "selectionBackground": "#b6d7ff",
+      "selectionForeground": "#1f2328",
+      "selectionInactiveBackground": "#dbeafe",
+      "black": "#24292f",
+      "red": "#cf222e",
+      "green": "#1a7f37",
+      "yellow": "#9a6700",
+      "blue": "#0969da",
+      "magenta": "#8250df",
+      "cyan": "#1b7c83",
+      "white": "#6e7781",
+      "brightBlack": "#57606a",
+      "brightRed": "#a40e26",
+      "brightGreen": "#116329",
+      "brightYellow": "#7d4e00",
+      "brightBlue": "#0550ae",
+      "brightMagenta": "#6639ba",
+      "brightCyan": "#0a6c74",
+      "brightWhite": "#1f2328"
+    },
+    "ui": {
+      "--bg": "#f6f8fa",
+      "--bg-surface": "#ffffff",
+      "--bg-elevated": "#eef2f6",
+      "--bg-terminal": "#ffffff",
+      "--text": "#1f2328",
+      "--text-muted": "#57606a",
+      "--text-dim": "#656d76",
+      "--accent": "#0969da",
+      "--accent-secondary": "#0550ae",
+      "--accent-secondary-light": "#0550ae",
+      "--border": "#d0d7de",
+      "--border-strong": "#afb8c1",
+      "--error": "#cf222e",
+      "--error-bg": "#ffebe9",
+      "--on-accent": "#ffffff",
+      "--surface-dot": "#eaeef2",
+      "--scrollbar-track": "rgba(208, 215, 222, 0.45)",
+      "--scrollbar-thumb": "rgba(87, 96, 106, 0.35)",
+      "--scrollbar-thumb-hover": "rgba(87, 96, 106, 0.55)",
+      "--scanline-tint": "transparent",
+      "--accent-glow": "rgba(9, 105, 218, 0.08)",
+      "--accent-bg": "rgba(9, 105, 218, 0.1)",
+      "--modal-overlay": "rgba(31, 35, 40, 0.48)",
+      "--on-surface": "#1f2328",
+      "--on-surface-variant": "#57606a",
+      "--agent-user-color": "#0969da",
+      "--agent-agent-color": "#8250df"
+    }
+  },
+  "cyberpunk": {
+    "name": "Cyberpunk",
+    "colorScheme": "dark",
+    "appearance": {
+      "style": "cyberpunk",
+      "shape": "square",
+      "density": "compact",
+      "font": "mono",
+      "shadow": "none",
+      "motion": "full",
+      "blur": "none",
+      "components": {
+        "button": "outline",
+        "input": "underline",
+        "card": "outlined",
+        "tabs": "underline"
+      }
+    },
+    "background": {
+      "type": "linear",
+      "stops": [
+        "#0a0a0a",
+        "#11170c"
+      ],
+      "angle": 165,
+      "scrim": 0.3,
+      "animation": "none"
+    },
+    "effects": {
+      "scanline": 1,
+      "flicker": 1
+    },
+    "terminal": {
+      "background": "#0a0a0a",
+      "foreground": "#4af626",
+      "cursor": "#14d1ff",
+      "cursorAccent": "#0a0a0a",
+      "selectionBackground": "#273747"
+    },
+    "ui": {
+      "--bg": "#0a0a0a",
+      "--bg-surface": "#121212",
+      "--bg-elevated": "#131313",
+      "--bg-terminal": "#0e0e0e",
+      "--text": "#4af626",
+      "--text-muted": "#bbccb0",
+      "--text-dim": "#3c4b36",
+      "--accent": "#4af626",
+      "--accent-secondary": "#14d1ff",
+      "--accent-secondary-light": "#b7eaff",
+      "--border": "#1f1f1f",
+      "--border-strong": "#3c4b36",
+      "--error": "#ffb4ab",
+      "--error-bg": "#93000a",
+      "--on-accent": "#022100",
+      "--surface-dot": "#353534",
+      "--scrollbar-track": "rgba(28, 27, 27, 0.5)",
+      "--scrollbar-thumb": "rgba(60, 75, 54, 0.8)",
+      "--scrollbar-thumb-hover": "rgba(134, 149, 125, 0.8)",
+      "--scanline-tint": "rgba(74, 246, 38, 0.02)",
+      "--accent-glow": "rgba(74, 246, 38, 0.08)",
+      "--accent-bg": "rgba(74, 246, 38, 0.1)",
+      "--modal-overlay": "rgba(0, 0, 0, 0.8)",
+      "--on-surface": "#e5e2e1",
+      "--on-surface-variant": "#bbccb0",
+      "--agent-user-color": "#4af626",
+      "--agent-agent-color": "#14d1ff"
+    }
+  },
+  "liquid-glass": {
+    "name": "Liquid Glass",
+    "colorScheme": "light",
+    "appearance": {
+      "style": "liquid",
+      "shape": "soft",
+      "density": "comfortable",
+      "font": "system",
+      "shadow": "elevated",
+      "motion": "full",
+      "blur": "strong",
+      "components": {
+        "button": "soft",
+        "input": "boxed",
+        "card": "elevated",
+        "tabs": "segmented"
+      }
+    },
+    "background": {
+      "type": "mesh",
+      "stops": [
+        "#a2d2ff",
+        "#d8b4fe",
+        "#ffc8dd",
+        "#bde0fe",
+        "#ffdfba"
+      ],
+      "angle": 135,
+      "scrim": 0.35,
+      "animation": "drift"
+    },
+    "effects": {
+      "glow": 0.35
+    },
+    "typography": {
+      "fontScale": 1.02,
+      "radiusScale": 1.4
+    },
+    "terminal": {
+      "background": "#fbfbfd",
+      "foreground": "#1d1d1f",
+      "cursor": "#0071e3",
+      "cursorAccent": "#ffffff",
+      "selectionBackground": "#b3d7ff",
+      "selectionForeground": "#1d1d1f",
+      "selectionInactiveBackground": "#e5f0ff",
+      "black": "#1d1d1f",
+      "red": "#ff3b30",
+      "green": "#34c759",
+      "yellow": "#ff9500",
+      "blue": "#0071e3",
+      "magenta": "#af52de",
+      "cyan": "#55bef0",
+      "white": "#8e8e93",
+      "brightBlack": "#636366",
+      "brightRed": "#ff453a",
+      "brightGreen": "#30d158",
+      "brightYellow": "#ffd60a",
+      "brightBlue": "#409cff",
+      "brightMagenta": "#bf5af2",
+      "brightCyan": "#64d2ff",
+      "brightWhite": "#1d1d1f"
+    },
+    "ui": {
+      "--bg": "#e6ecf4",
+      "--bg-surface": "rgba(255, 255, 255, 0.22)",
+      "--bg-elevated": "rgba(255, 255, 255, 0.38)",
+      "--bg-terminal": "rgba(255, 255, 255, 0.88)",
+      "--text": "#1d1d1f",
+      "--text-muted": "#515154",
+      "--text-dim": "#69696e",
+      "--accent": "#0066da",
+      "--accent-secondary": "#5856d6",
+      "--accent-secondary-light": "#c7dfff",
+      "--border": "rgba(255, 255, 255, 0.42)",
+      "--border-strong": "rgba(255, 255, 255, 0.72)",
+      "--error": "#d70015",
+      "--error-bg": "rgba(215, 0, 21, 0.12)",
+      "--on-accent": "#ffffff",
+      "--surface-dot": "rgba(0, 0, 0, 0.08)",
+      "--scrollbar-track": "rgba(0, 0, 0, 0.03)",
+      "--scrollbar-thumb": "rgba(0, 0, 0, 0.18)",
+      "--scrollbar-thumb-hover": "rgba(0, 0, 0, 0.32)",
+      "--scanline-tint": "transparent",
+      "--accent-glow": "rgba(0, 102, 218, 0.16)",
+      "--accent-bg": "rgba(0, 102, 218, 0.1)",
+      "--modal-overlay": "rgba(20, 24, 33, 0.28)",
+      "--on-surface": "#1d1d1f",
+      "--on-surface-variant": "#515154",
+      "--agent-user-color": "#0066da",
+      "--agent-agent-color": "#5856d6"
+    }
+  }
+} /* THEME_PRESETS_END */;
+
+const VARIABLE_GROUPS = [
+  { titleKey: 'group.backgrounds', vars: ['--bg', '--bg-surface', '--bg-elevated', '--bg-terminal'] },
+  { titleKey: 'group.text', vars: ['--text', '--text-muted', '--text-dim', '--on-surface', '--on-surface-variant'] },
+  { titleKey: 'group.accents', vars: ['--accent', '--accent-secondary', '--accent-secondary-light', '--on-accent'] },
+  { titleKey: 'group.borders', vars: ['--border', '--border-strong'] },
+  { titleKey: 'group.error', vars: ['--error', '--error-bg'] },
+  { titleKey: 'group.components', vars: ['--surface-dot', '--scrollbar-track', '--scrollbar-thumb', '--scrollbar-thumb-hover'] },
+  { titleKey: 'group.agent', vars: ['--agent-user-color', '--agent-agent-color'] },
+  { titleKey: 'group.effects', vars: ['--scanline-tint', '--accent-glow', '--accent-bg', '--modal-overlay'] },
+];
+
+const VARIABLE_LABELS = {
+  '--bg': 'variable.bg',
+  '--bg-surface': 'variable.bgSurface',
+  '--bg-elevated': 'variable.bgElevated',
+  '--bg-terminal': 'variable.bgTerminal',
+  '--text': 'variable.text',
+  '--text-muted': 'variable.textMuted',
+  '--text-dim': 'variable.textDim',
+  '--accent': 'variable.accent',
+  '--accent-secondary': 'variable.accentSecondary',
+  '--accent-secondary-light': 'variable.accentSecondaryLight',
+  '--on-accent': 'variable.onAccent',
+  '--border': 'variable.border',
+  '--border-strong': 'variable.borderStrong',
+  '--error': 'variable.error',
+  '--error-bg': 'variable.errorBg',
+  '--surface-dot': 'variable.surfaceDot',
+  '--scrollbar-track': 'variable.scrollbarTrack',
+  '--scrollbar-thumb': 'variable.scrollbarThumb',
+  '--scrollbar-thumb-hover': 'variable.scrollbarThumbHover',
+  '--agent-user-color': 'variable.agentUser',
+  '--agent-agent-color': 'variable.agentBot',
+  '--scanline-tint': 'variable.scanline',
+  '--accent-glow': 'variable.accentGlow',
+  '--accent-bg': 'variable.accentBg',
+  '--modal-overlay': 'variable.modalOverlay',
+  '--on-surface': 'variable.onSurface',
+  '--on-surface-variant': 'variable.onSurfaceVariant',
+};
+
+let theme = {};
+let terminalTheme = {};
+let activePreset = 'cyberpunk';
+let colorScheme = 'dark';
+let themeName = 'Cyberpunk';
+let appearance = {};
+let background = null;
+let effects = {};
+let typography = null;
+const THEME_MAX_BYTES = 64 * 1024;
+const invalidColorProperties = new Set();
+
+const APPEARANCE_FIELDS = [
+  { key: 'style', labelKey: 'appearance.style', values: ['standard', 'cyberpunk', 'soft', 'dense', 'liquid'] },
+  { key: 'shape', labelKey: 'appearance.shape', values: ['square', 'rounded', 'soft'] },
+  { key: 'density', labelKey: 'appearance.density', values: ['compact', 'comfortable', 'spacious'] },
+  { key: 'font', labelKey: 'appearance.font', values: ['mono', 'system'] },
+  { key: 'shadow', labelKey: 'appearance.shadow', values: ['none', 'subtle', 'elevated'] },
+  { key: 'motion', labelKey: 'appearance.motion', values: ['none', 'reduced', 'full'] },
+  { key: 'blur', labelKey: 'appearance.blur', values: ['none', 'subtle', 'strong'] },
+];
+
+const COMPONENT_FIELDS = [
+  { key: 'button', labelKey: 'appearance.button', values: ['outline', 'solid', 'soft'] },
+  { key: 'input', labelKey: 'appearance.input', values: ['underline', 'boxed'] },
+  { key: 'card', labelKey: 'appearance.card', values: ['outlined', 'flat', 'elevated'] },
+  { key: 'tabs', labelKey: 'appearance.tabs', values: ['underline', 'segmented'] },
+];
+
+function syncThemeSelectors(value) {
+  document.getElementById('preset-select').value = value;
+  document.querySelectorAll('.terminal-theme-select').forEach(select => {
+    select.value = value;
+  });
+}
+
+function initTheme(presetName) {
+  const preset = PRESETS[presetName];
+  if (!preset) return;
+  invalidColorProperties.clear();
+  theme = { ...preset.ui };
+  terminalTheme = { ...preset.terminal };
+  activePreset = presetName;
+  colorScheme = preset.colorScheme;
+  themeName = preset.name;
+  appearance = {
+    ...preset.appearance,
+    components: { ...preset.appearance.components },
+  };
+  background = preset.background ? structuredClone(preset.background) : null;
+  effects = { ...(preset.effects || {}) };
+  typography = preset.typography ? { ...preset.typography } : null;
+  renderControls();
+  applyTheme();
+  syncThemeSelectors(presetName);
+  updateExportAvailability();
+}
+
+function markThemeCustomized() {
+  syncThemeSelectors('custom');
+}
+
+function isHexColor(val) {
+  return /^#[0-9a-fA-F]{6}$/.test(val) || /^#[0-9a-fA-F]{3}$/.test(val);
+}
+
+function escapeAttribute(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderControls() {
+  const container = document.getElementById('controls');
+  let html = `<div class="section-title">${t('group.basic')}</div>`;
+  html += settingInput('appearance.name', themeName, 'data-theme-name');
+  html += settingSelect('appearance.colorScheme', colorScheme, ['dark', 'light'], 'data-color-scheme');
+  html += `<div class="section-title">${t('group.appearance')}</div>`;
+  html += APPEARANCE_FIELDS
+    .map(field => settingSelect(field.labelKey, appearance[field.key], field.values, `data-appearance="${field.key}"`))
+    .join('');
+  html += `<div class="section-title">${t('group.componentStyles')}</div>`;
+  html += COMPONENT_FIELDS
+    .map(field => settingSelect(
+      field.labelKey,
+      appearance.components?.[field.key],
+      field.values,
+      `data-component="${field.key}"`,
+    ))
+    .join('');
+
+  // V3：背景层 / 效果 / 版式面板
+  html += `<div class="section-title">${t('group.themeV3Background')}</div>`;
+  html += settingSelect('background.type', background?.type || 'solid', ['solid', 'linear', 'radial', 'mesh'], 'data-background="type"');
+  html += settingRange('background.angle', background?.angle ?? 160, 0, 360, 1, 'data-background="angle"');
+  html += settingRange('background.scrim', background?.scrim ?? 0.3, 0, 0.85, 0.01, 'data-background="scrim"');
+  html += settingSelect('background.animation', background?.animation || 'none', ['none', 'drift'], 'data-background="animation"');
+  for (let i = 0; i < 4; i++) {
+    html += settingInput(`background.stop${i + 1}`, background?.stops?.[i] || '', `data-background-stop="${i}"`);
+  }
+
+  html += `<div class="section-title">${t('group.themeV3Effects')}</div>`;
+  html += settingRange('effects.scanline', effects.scanline ?? 0, 0, 1, 0.05, 'data-effect="scanline"');
+  html += settingRange('effects.flicker', effects.flicker ?? 0, 0, 1, 0.05, 'data-effect="flicker"');
+  html += settingRange('effects.glow', effects.glow ?? 0, 0, 1, 0.05, 'data-effect="glow"');
+  html += settingRange('effects.noise', effects.noise ?? 0, 0, 1, 0.01, 'data-effect="noise"');
+
+  html += `<div class="section-title">${t('group.themeV3Typography')}</div>`;
+  html += settingRange('typography.fontScale', typography?.fontScale ?? 1, 0.85, 1.25, 0.01, 'data-typography="fontScale"');
+  html += settingRange('typography.radiusScale', typography?.radiusScale ?? 1, 0.5, 2, 0.05, 'data-typography="radiusScale"');
+
+  for (const group of VARIABLE_GROUPS) {
+    html += `<div class="section-title">${t(group.titleKey)}</div>`;
+    for (const varName of group.vars) {
+      const val = theme[varName] || '';
+      const label = t(VARIABLE_LABELS[varName] || varName);
+      const isHex = isHexColor(val);
+
+      html += `<div class="color-row">`;
+      html += `<label>${label}</label>`;
+      if (isHex) {
+        html += `<input type="color" value="${val}" data-var="${varName}" aria-label="${escapeAttribute(label)}">`;
+      }
+      html += `<input type="text" value="${escapeAttribute(val)}" data-var="${varName}" aria-label="${escapeAttribute(label)}" spellcheck="false">`;
+      html += `</div>`;
+    }
+  }
+
+  container.innerHTML = html;
+
+  container.querySelector('[data-theme-name]').addEventListener('input', (event) => {
+    themeName = event.target.value.slice(0, 80);
+    markThemeCustomized();
+  });
+
+  container.querySelector('[data-color-scheme]').addEventListener('change', (event) => {
+    colorScheme = event.target.value;
+    markThemeCustomized();
+    applyTheme();
+  });
+
+  container.querySelectorAll('[data-appearance]').forEach(select => {
+    select.addEventListener('change', (event) => {
+      appearance[event.target.dataset.appearance] = event.target.value;
+      markThemeCustomized();
+      applyTheme();
+    });
+  });
+
+  container.querySelectorAll('[data-component]').forEach(select => {
+    select.addEventListener('change', (event) => {
+      appearance.components[event.target.dataset.component] = event.target.value;
+      markThemeCustomized();
+      applyTheme();
+    });
+  });
+
+  // V3：背景层 / 效果 / 版式控件事件
+  container.querySelectorAll('[data-background]').forEach(control => {
+    control.addEventListener('input', (event) => {
+      const target = event.target;
+      const key = target.dataset.background;
+      background = normalizeBackgroundState(background);
+      if (key === 'angle' || key === 'scrim') {
+        background[key] = Number(target.value);
+      } else {
+        background[key] = target.value;
+      }
+      markThemeCustomized();
+      applyTheme();
+    });
+  });
+
+  container.querySelectorAll('[data-background-stop]').forEach(input => {
+    input.addEventListener('input', (event) => {
+      const target = event.target;
+      const index = Number(target.dataset.backgroundStop);
+      background = normalizeBackgroundState(background);
+      const stops = [...(background.stops || [])];
+      const value = target.value.trim();
+      if (value === '') {
+        delete stops[index];
+      } else if (isSafeColor(value)) {
+        stops[index] = value;
+        target.setAttribute('aria-invalid', 'false');
+      } else {
+        target.setAttribute('aria-invalid', 'true');
+      }
+      background.stops = stops.filter(stop => stop !== undefined);
+      markThemeCustomized();
+      applyTheme();
+    });
+  });
+
+  container.querySelectorAll('[data-effect]').forEach(input => {
+    input.addEventListener('input', (event) => {
+      const key = event.target.dataset.effect;
+      const value = Number(event.target.value);
+      if (value > 0) effects[key] = value;
+      else delete effects[key];
+      markThemeCustomized();
+      applyTheme();
+    });
+  });
+
+  container.querySelectorAll('[data-typography]').forEach(input => {
+    input.addEventListener('input', (event) => {
+      const key = event.target.dataset.typography;
+      const value = Number(event.target.value);
+      typography = {
+        fontScale: typography?.fontScale ?? 1,
+        radiusScale: typography?.radiusScale ?? 1,
+        [key]: value,
+      };
+      if (typography.fontScale === 1 && typography.radiusScale === 1) typography = null;
+      markThemeCustomized();
+      applyTheme();
+    });
+  });
+
+  container.querySelectorAll('input[type="color"]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const varName = e.target.dataset.var;
+      theme[varName] = e.target.value;
+      invalidColorProperties.delete(varName);
+      const textInput = container.querySelector(`input[type="text"][data-var="${varName}"]`);
+      if (textInput) {
+        textInput.value = e.target.value;
+        textInput.setAttribute('aria-invalid', 'false');
+      }
+      markThemeCustomized();
+      updateExportAvailability();
+      applyTheme();
+    });
+  });
+
+  container.querySelectorAll('input[type="text"][data-var]').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const varName = e.target.dataset.var;
+      const val = e.target.value;
+      const isValid = isSafeColor(val);
+      e.target.setAttribute('aria-invalid', String(!isValid));
+      if (!isValid) {
+        invalidColorProperties.add(varName);
+        markThemeCustomized();
+        updateExportAvailability();
+        return;
+      }
+      invalidColorProperties.delete(varName);
+      theme[varName] = val;
+      const colorInput = container.querySelector(`input[type="color"][data-var="${varName}"]`);
+      if (colorInput && isHexColor(val)) {
+        colorInput.value = val.length === 4
+          ? '#' + val[1]+val[1]+val[2]+val[2]+val[3]+val[3]
+          : val;
+      }
+      markThemeCustomized();
+      updateExportAvailability();
+      applyTheme();
+    });
+  });
+
+  updateExportAvailability();
+}
+
+function updateExportAvailability() {
+  const exportButton = document.getElementById('btn-export');
+  exportButton.disabled = invalidColorProperties.size > 0;
+  exportButton.title = invalidColorProperties.size > 0
+    ? t('feedback.invalidColor')
+    : t('editor.exportTitle');
+}
+
+function settingInput(labelKey, value, attribute) {
+  return `<div class="setting-row"><label>${t(labelKey)}</label>`
+    + `<input type="text" value="${escapeAttribute(value)}" ${attribute} aria-label="${escapeAttribute(t(labelKey))}" maxlength="80"></div>`;
+}
+
+function settingSelect(labelKey, value, values, attribute) {
+  const options = values.map(option =>
+    `<option value="${option}"${option === value ? ' selected' : ''}>${t(`option.${option}`)}</option>`
+  ).join('');
+  return `<div class="setting-row"><label>${t(labelKey)}</label>`
+    + `<select ${attribute} aria-label="${escapeAttribute(t(labelKey))}">${options}</select></div>`;
+}
+
+function settingRange(labelKey, value, min, max, step, attribute) {
+  return `<div class="setting-row"><label>${t(labelKey)}</label>`
+    + `<input type="range" min="${min}" max="${max}" step="${step}" value="${value}" ${attribute} aria-label="${escapeAttribute(t(labelKey))}">`
+    + `<span class="range-value">${value}</span></div>`;
+}
+
+function normalizeBackgroundState(current) {
+  if (current) return current;
+  return {
+    type: 'linear',
+    stops: ['#0a0a0a'],
+    angle: 160,
+    scrim: 0.3,
+    animation: 'none',
+  };
+}
+
+function applyTheme() {
+  const scope = document.getElementById('theme-scope');
+  scope.style.colorScheme = colorScheme;
+  scope.dataset.colorScheme = colorScheme;
+  scope.dataset.uiStyle = appearance.style;
+  scope.dataset.uiShape = appearance.shape;
+  scope.dataset.uiDensity = appearance.density;
+  scope.dataset.uiFont = appearance.font;
+  scope.dataset.uiShadow = appearance.shadow;
+  scope.dataset.uiMotion = appearance.motion;
+  scope.dataset.uiBlur = appearance.blur;
+  scope.dataset.componentButton = appearance.components.button;
+  scope.dataset.componentInput = appearance.components.input;
+  scope.dataset.componentCard = appearance.components.card;
+  scope.dataset.componentTabs = appearance.components.tabs;
+  for (const [varName, val] of Object.entries(theme)) {
+    scope.style.setProperty(varName, val);
+  }
+  // V3：背景栈（含读性遮罩）与效果开关（与应用同构）
+  if (background && background.type !== 'solid' && (background.stops || []).length >= 2 && background.stops.every(isSafeColor)) {
+    const channel = colorScheme === 'dark' ? '0, 0, 0' : '255, 255, 255';
+    const scrimAlpha = background.scrim ?? 0.3;
+    const scrim = `linear-gradient(rgba(${channel}, ${scrimAlpha}), rgba(${channel}, ${scrimAlpha}))`;
+    let gradient;
+    if (background.type === 'linear') {
+      gradient = `linear-gradient(${background.angle ?? 160}deg, ${background.stops.join(', ')})`;
+    } else if (background.type === 'radial') {
+      gradient = `radial-gradient(ellipse at 50% 25%, ${background.stops.join(', ')})`;
+    } else {
+      const [a, b, c] = background.stops;
+      gradient = [
+        `radial-gradient(at 18% 22%, ${a} 0px, transparent 55%)`,
+        `radial-gradient(at 82% 28%, ${b || a} 0px, transparent 50%)`,
+        `radial-gradient(at 50% 88%, ${c || b || a} 0px, transparent 60%)`,
+      ].join(', ');
+    }
+    scope.style.setProperty('--app-bg-stack', `${scrim}, ${gradient}`);
+    scope.dataset.bgAnimation = background.animation === 'drift' ? 'drift' : 'none';
+  } else {
+    scope.style.setProperty('--app-bg-stack', 'none');
+    scope.dataset.bgAnimation = 'none';
+  }
+  scope.dataset.fxScanline = effects.scanline ? 'on' : 'off';
+  scope.dataset.fxFlicker = effects.flicker ? 'on' : 'off';
+  scope.dataset.fxGlow = effects.glow ? 'on' : 'off';
+  scope.dataset.fxNoise = effects.noise ? 'on' : 'off';
+  scope.style.setProperty('--fx-scanline-opacity', String(effects.scanline ?? 1));
+  scope.style.setProperty('--fx-flicker-speed', `${0.32 - 0.2 * (effects.flicker ?? 1)}s`);
+  scope.style.setProperty('--fx-glow-strength', String(effects.glow ?? 0.6));
+  scope.style.setProperty('--fx-noise-opacity', String(effects.noise ?? 0.05));
+  scope.style.setProperty('--radius-scale', String(typography?.radiusScale ?? 1));
+  scope.style.setProperty('--type-scale', String(typography?.fontScale ?? 1));
+}
+
+// Preset selector
+document.getElementById('preset-select').addEventListener('change', (event) => {
+  initTheme(event.target.value);
+});
+document.querySelectorAll('.terminal-theme-select').forEach(select => {
+  select.addEventListener('change', (event) => initTheme(event.target.value));
+});
+
+// Import
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('import-input').click();
+});
+
+document.getElementById('import-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > THEME_MAX_BYTES) {
+    showToast('feedback.fileTooLarge', 'error');
+    e.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      const importedVariables = sanitizeColorRecord(data.ui, Object.keys(PRESETS.cyberpunk.ui));
+      const importedTerminal = sanitizeColorRecord(data.terminal, Object.keys(PRESETS['standard-dark'].terminal));
+      const importedAppearance = sanitizeAppearance(data.appearance);
+      if (!Object.keys(importedVariables).length
+        && !Object.keys(importedTerminal).length
+        && !importedAppearance) {
+        showToast('feedback.missingUi', 'error');
+        return;
+      }
+      const importedScheme = data.colorScheme === 'light' || data.colorScheme === 'dark'
+        ? data.colorScheme
+        : inferColorScheme(importedVariables['--bg'] || importedTerminal.background);
+      const requestedBase = typeof data.baseTheme === 'string' && PRESETS[data.baseTheme]
+        ? data.baseTheme
+        : (importedScheme === 'light' ? 'standard-light' : 'cyberpunk');
+      const fallbackPreset = PRESETS[requestedBase];
+      theme = { ...fallbackPreset.ui, ...importedVariables };
+      terminalTheme = { ...fallbackPreset.terminal, ...importedTerminal };
+      colorScheme = importedScheme;
+      themeName = typeof data.name === 'string' && data.name.trim()
+        ? data.name.trim().slice(0, 80)
+        : 'Custom';
+      appearance = mergeAppearance(fallbackPreset.appearance, importedAppearance);
+      background = sanitizeBackground(data.background, importedScheme)
+        || structuredClone(fallbackPreset.background || null);
+      effects = { ...(fallbackPreset.effects || {}), ...(sanitizeEffects(data.effects) || {}) };
+      typography = sanitizeTypography(data.typography)
+        || (fallbackPreset.typography ? { ...fallbackPreset.typography } : null);
+      activePreset = requestedBase;
+      invalidColorProperties.clear();
+      syncThemeSelectors('custom');
+      renderControls();
+      applyTheme();
+      updateExportAvailability();
+      showToast('feedback.imported');
+    } catch {
+      showToast('feedback.invalidJson', 'error');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// Export
+document.getElementById('btn-export').addEventListener('click', () => {
+  if (invalidColorProperties.size > 0) {
+    showToast('feedback.invalidColor', 'error');
+    return;
+  }
+  const safeUiTheme = sanitizeColorRecord(theme, Object.keys(PRESETS.cyberpunk.ui));
+  const safeTerminalTheme = sanitizeColorRecord(
+    terminalTheme,
+    Object.keys(PRESETS['standard-dark'].terminal),
+  );
+  const output = {
+    schemaVersion: 4,
+    name: themeName.trim() || 'Custom',
+    baseTheme: activePreset || (colorScheme === 'light' ? 'standard-light' : 'cyberpunk'),
+    colorScheme,
+    appearance: {
+      ...appearance,
+      components: { ...appearance.components },
+    },
+    terminal: {
+      ...safeTerminalTheme,
+      background: safeUiTheme['--bg-terminal'] || safeTerminalTheme.background,
+      foreground: safeUiTheme['--text'] || safeTerminalTheme.foreground,
+      cursor: safeUiTheme['--accent-secondary'] || safeTerminalTheme.cursor,
+      cursorAccent: safeUiTheme['--bg-terminal'] || safeTerminalTheme.cursorAccent,
+      selectionBackground: safeUiTheme['--border-strong'] || safeTerminalTheme.selectionBackground,
+    },
+    ui: safeUiTheme,
+  };
+  const safeBackground = sanitizeBackground(background, colorScheme);
+  if (safeBackground) output.background = safeBackground;
+  const safeEffects = sanitizeEffects(effects);
+  if (safeEffects) output.effects = safeEffects;
+  const safeTypography = sanitizeTypography(typography);
+  if (safeTypography) output.typography = safeTypography;
+
+  const json = JSON.stringify(output, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = output.name.toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff_-]+/gi, '-')
+    .replace(/^-+|-+$/g, '') || 'custom';
+  a.download = `cloudssh-theme-${safeName}.json`;
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('feedback.exported');
+});
+
+function sanitizeColorRecord(value, allowedProperties) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const allowed = new Set(allowedProperties);
+  return Object.fromEntries(
+    Object.entries(value).filter(([key, color]) =>
+      allowed.has(key) && typeof color === 'string' && isSafeColor(color)
+    )
+  );
+}
+
+function isSafeColor(value) {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 96 || /url\s*\(|var\s*\(|expression\s*\(/i.test(normalized)) {
+    return false;
+  }
+  return normalized === 'transparent'
+    || /^#[0-9a-f]{3,8}$/i.test(normalized)
+    || /^rgba?\(\s*[\d.\s,%+-]+\)$/i.test(normalized)
+    || /^hsla?\(\s*[\d.\s,%+-]+(?:deg|rad|turn)?[\d.\s,%+-]*\)$/i.test(normalized);
+}
+
+function sanitizeAppearance(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const result = { components: {} };
+  for (const field of APPEARANCE_FIELDS) {
+    if (field.values.includes(value[field.key])) result[field.key] = value[field.key];
+  }
+  const components = value.components && typeof value.components === 'object'
+    ? value.components
+    : {};
+  for (const field of COMPONENT_FIELDS) {
+    if (field.values.includes(components[field.key])) result.components[field.key] = components[field.key];
+  }
+  return Object.keys(result).length > 1 || Object.keys(result.components).length ? result : null;
+}
+
+function sanitizeBackground(value, scheme) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const stops = Array.isArray(value.stops)
+    ? value.stops.filter(s => typeof s === 'string' && isSafeColor(s)).slice(0, 5)
+    : [];
+  if (stops.length === 0) return null;
+  const type = ['solid', 'linear', 'radial', 'mesh'].includes(value.type) ? value.type : 'linear';
+  const animation = value.animation === 'drift' ? 'drift' : 'none';
+  const angle = Math.min(360, Math.max(0, Number(value.angle) || 160));
+  let scrim = Math.min(0.85, Math.max(0, Number(value.scrim) || 0));
+  if (type !== 'solid') scrim = Math.max(scrim, scheme === 'light' ? 0.35 : 0.25);
+  return { type, stops, angle, scrim, animation };
+}
+
+function sanitizeEffects(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const result = {};
+  for (const name of ['scanline', 'flicker', 'glow', 'noise']) {
+    const raw = Number(value[name]);
+    if (Number.isFinite(raw) && raw > 0) result[name] = Math.min(1, raw);
+  }
+  return Object.keys(result).length ? result : undefined;
+}
+
+function sanitizeTypography(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const fontScale = Math.min(1.25, Math.max(0.85, Number(value.fontScale) || 1));
+  const radiusScale = Math.min(2, Math.max(0.5, Number(value.radiusScale) || 1));
+  if (fontScale === 1 && radiusScale === 1) return null;
+  return { fontScale, radiusScale };
+}
+
+function mergeAppearance(fallback, imported) {
+  return {
+    ...fallback,
+    ...(imported || {}),
+    components: {
+      ...fallback.components,
+      ...(imported?.components || {}),
+    },
+  };
+}
+
+function inferColorScheme(background) {
+  if (!background || !/^#[0-9a-fA-F]{6}$/.test(background)) return 'dark';
+  const channels = background.slice(1).match(/.{2}/g).map(value => parseInt(value, 16) / 255);
+  const luminance = channels
+    .map(value => value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4))
+    .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+  return luminance > 0.5 ? 'light' : 'dark';
+}
+
+document.getElementById('language-toggle').addEventListener('click', () => {
+  setLocale(locale === 'zh-CN' ? 'zh-TW' : locale === 'zh-TW' ? 'en-US' : 'zh-CN');
+});
+
+document.querySelectorAll('[data-current-year]').forEach((element) => {
+  element.textContent = new Date().getFullYear();
+});
+
+// Init
+locale = resolveInitialLocale();
+translateDocument();
+initTheme('cyberpunk');
+</script>
+</body>
+</html>

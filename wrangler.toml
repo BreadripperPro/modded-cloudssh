@@ -1,0 +1,97 @@
+name = "cloudssh"
+main = "src/worker/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+[vars]
+DEBUG_MODE = "false"
+# 一次性受控 SSH 分享：随部署默认启用（Git 集成/CLI 部署即生效，生产与 test 环境均置 true）。
+# 关闭改为 "false" 或删除本行；Dashboard 手动上传部署不受 [vars] 影响，如需启用需自行添加该变量。
+ENABLE_SSH_SHARING = "true"
+# 用户无操作空闲超时：默认 30 分钟（支持 30m / 1h / 1800s / 纯数字按秒）；设为 "0" 禁用
+IDLE_TIMEOUT = "30m"
+# 是否强制登录后才能使用 SSH（GitHub 或单管理员密码会话均满足）；"false" 保持匿名直连可用
+REQUIRE_GITHUB_AUTH = "false"
+# SSH 远端主机公钥签名严格校验：默认 fail-closed；仅本地调试老旧服务器时才允许 "false"
+STRICT_HOST_KEY_VERIFY = "true"
+
+# ========== 外部独立前端（跨源接入，默认关闭）==========
+# 把前端单独部署到 Vercel 等平台时，在 Worker 侧放行该前端的 origin。
+# 取消注释并填成**精确 origin**（https:// 开头，不带路径/尾斜杠）：
+# - FRONTEND_URL：外部前端主地址，自动加入白名单；用于 GitHub OAuth 登录后跳转与分享链接
+# - FRONTEND_ORIGINS：额外的外部前端 origin 白名单（逗号分隔，精确匹配）
+#
+# 安全约束（务必先读）：
+# - **禁止通配符**：`*.vercel.app` 这类条目会被直接忽略并打印告警。通配符会让任意
+#   第三方站点（例如别人 fork 出来的 Vercel 预览部署）都能带着用户会话调用本 Worker
+#   的 API，等同于把账号交出去。
+# - 生产环境必须是 https；明文 http 仅放行 localhost / 127.0.0.1 / ::1。
+# - 两项都留空时保持「纯同源」部署，既有行为完全不变（不返回任何 CORS 头）。
+# FRONTEND_URL = "https://cloudssh-frontend.vercel.app"
+# FRONTEND_ORIGINS = "https://cloudssh-frontend.vercel.app,https://preview.example.com"
+
+# 构建监视路径：仅源代码变动时触发重新构建
+[build]
+watch_dir = "."
+
+# 下述注释的配置推荐采用环境变量的形式在 Cloudflare Dashboard 中直接添加：
+# - GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET（GitHub OAuth）
+# - GITHUB_ALLOWED_USER_IDS（可选，逗号分隔的 GitHub 数字用户 ID 白名单）
+# - TURNSTILE_SECRET / TURNSTILE_SITEKEY（Bot 验证；默认不部署，用户自行选择加入。
+#   经 Git/CLI 部署的实例建议 SECRET 用 Dashboard Secret 类型——Secret 不受部署覆盖）
+# - BASE_URL（OAuth 回调地址，需与实际域名一致）
+# - ADMIN_PASSWORD_HASH（单管理员密码登录；`pnpm run hash-password` 生成，非空即启用密码模式，
+#   与 GitHub OAuth 互斥且优先级更高；置空/删除即刻退回 GitHub 模式；务必设为 Secret 类型）
+# - CF_ACCESS（可选；Cloudflare Zero Trust Access 认证模式，在 Dashboard 域名旁一键启用 Access 即可自动感知）
+# - FRONTEND_URL / FRONTEND_ORIGINS（可选；外部独立前端跨源接入白名单，见 [vars] 段注释；
+#   仅当前端独立部署到 Vercel 等平台时才需要，test 环境请在 [env.test.vars] 单独配置）
+
+[[durable_objects.bindings]]
+name = "SSH_SESSION"
+class_name = "SSHSessionDO"
+
+[[durable_objects.bindings]]
+name = "USER_DB"
+class_name = "UserDBDO"
+
+[[durable_objects.bindings]]
+name = "SSH_SHARE"
+class_name = "SSHShareDO"
+
+# 首次部署及后续迁移通过 migration tag 初始化 SQLite Durable Object 类；
+# 已有环境新增或变更 DO 类时必须追加新的、不可复用的 migration tag
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SSHSessionDO", "UserDBDO"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SSHShareDO"]
+
+# ========== Test 环境 ==========
+# test 分支部署到独立 Worker；DO 类绑定相同，但实例与数据和生产环境隔离
+# 自定义域名请在 Cloudflare Dashboard 中手动绑定
+[env.test]
+name = "cloudssh-test"
+
+[env.test.vars]
+DEBUG_MODE = "true"
+ENABLE_SSH_SHARING = "true"
+IDLE_TIMEOUT = "30m"
+# test 环境默认要求登录（验证强制登录链路）；生产 [vars] 保持 "false" 匿名可用
+REQUIRE_GITHUB_AUTH = "true"
+STRICT_HOST_KEY_VERIFY = "true"
+# 若 test 环境也要接入外部独立前端，在此按 [vars] 段的注释添加 FRONTEND_URL / FRONTEND_ORIGINS
+# （与生产环境分开配置，避免生产 origin 误放行到 test 部署）
+
+[[env.test.durable_objects.bindings]]
+name = "SSH_SESSION"
+class_name = "SSHSessionDO"
+
+[[env.test.durable_objects.bindings]]
+name = "USER_DB"
+class_name = "UserDBDO"
+
+[[env.test.durable_objects.bindings]]
+name = "SSH_SHARE"
+class_name = "SSHShareDO"

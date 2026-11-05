@@ -1,0 +1,72 @@
+name: SSH interoperability
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [test, main]
+    paths:
+      - 'src/ssh/**'
+      - 'src/worker/ssh-session.ts'
+      - 'src/worker/ssh-interactive-auth.ts'
+      # Includes the test-only Go workspace and gateway module.
+      - 'tests/interop/**'
+      - 'tests/ssh/**'
+      - 'tests/tsconfig.worker.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ssh-interop.yml'
+  pull_request:
+    branches: [test]
+    paths:
+      - 'src/ssh/**'
+      - 'src/worker/ssh-session.ts'
+      - 'src/worker/ssh-interactive-auth.ts'
+      # Includes the test-only Go workspace and gateway module.
+      - 'tests/interop/**'
+      - 'tests/ssh/**'
+      - 'tests/tsconfig.worker.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ssh-interop.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  interoperability:
+    # Fork deployments use Cloudflare Git integration, not the maintainer's CI.
+    # Keep this at job level so neither matrix runner is allocated in other owners' forks.
+    if: github.repository_owner == 'newbietan'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: '11.8.0'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: tests/interop/gateway/go.sum
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Prepare Linux OpenSSH test prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-server
+          sudo mkdir -p /run/sshd
+      - name: Type check test harnesses
+        run: pnpm run typecheck:worker
+      - name: Real loopback OpenSSH and Go gateway interoperability
+        run: pnpm run test:interop
