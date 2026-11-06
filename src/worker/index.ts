@@ -1014,7 +1014,9 @@ function sanitizeAIErrorMessage(msg: string, secret?: string): string {
     sanitized = sanitized.replaceAll(secret, '***');
   }
   // 脱敏潜在的 Bearer token 格式
-  sanitized = sanitized.replace(/Bearer\s+[a-zA-Z0-9_\-.]{8,}/gi, 'Bearer ***');
+  // 字符集必须包含 ':'——会话令牌形如 `-1:<fp8>:<hex>`，否则只会遮住前缀、
+  // 把令牌后半段原样留在错误信息里。
+  sanitized = sanitized.replace(/Bearer\s+[a-zA-Z0-9_\-.:]{8,}/gi, 'Bearer ***');
   return sanitized;
 }
 

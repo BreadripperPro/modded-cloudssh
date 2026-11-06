@@ -79,6 +79,20 @@ afterEach(() => {
 
 const SESSION_TOKEN = '12345678:abcdef';
 
+/** 有效的 ADMIN_PASSWORD_HASH（盐 16 字节、校验值 32 字节） */
+const PASSWORD_HASH = `pbkdf2$sha256$1000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
+
+/** 会话令牌指纹 = ADMIN_PASSWORD_HASH 的 SHA-256 前 8 hex（与 auth.ts 口径一致） */
+async function hashFingerprint(hash: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hash))
+  );
+  return Array.from(digest)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 8);
+}
+
 /** UserDB 存根：校验会话令牌并返回用户信息（其余路由未 mock） */
 function makeSessionUserDbStub() {
   return makeDOStub(async (req) => {
@@ -435,6 +449,72 @@ describe('跨源会话通道', () => {
     const worker = await loadWorker();
     const res = await worker.fetch(
       makeRequest('/api/auth/me', { headers: { Authorization: 'Bearer !!!' } }),
+      makeEnv({ userDbStub: makeSessionUserDbStub() })
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('密码模式会话令牌（两处冒号）可通过 Authorization: Bearer 认证', async () => {
+    const worker = await loadWorker();
+    const fingerprint = await hashFingerprint(PASSWORD_HASH);
+    // 密码模式令牌格式：-1:<fp8>:<randomHex>（**两处**冒号）
+    const token = `-1:${fingerprint}:${'a'.repeat(64)}`;
+    const userDbStub = makeDOStub(async (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === '/internal/session/verify') {
+        const { token: presented } = (await req.json()) as { token: string };
+        if (presented !== token) {
+          return Response.json({ error: 'Invalid session' }, { status: 401 });
+        }
+        return Response.json({ id: 1, github_id: -1, username: 'admin', avatar_url: null });
+      }
+      return Response.json({ error: 'not mocked' }, { status: 500 });
+    });
+
+    const res = await worker.fetch(
+      makeRequest('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }),
+      makeEnv({ ADMIN_PASSWORD_HASH: PASSWORD_HASH, userDbStub })
+    );
+    expect(res.status).toBe(200);
+    const payload = (await res.json()) as { username: string };
+    expect(payload.username).toBe('admin');
+  });
+
+  it('密码模式会话令牌也可通过 auth_token 查询参数认证', async () => {
+    const worker = await loadWorker();
+    const fingerprint = await hashFingerprint(PASSWORD_HASH);
+    const token = `-1:${fingerprint}:${'b'.repeat(64)}`;
+    const userDbStub = makeDOStub(async (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === '/internal/session/verify') {
+        const { token: presented } = (await req.json()) as { token: string };
+        if (presented !== token) {
+          return Response.json({ error: 'Invalid session' }, { status: 401 });
+        }
+        return Response.json({ id: 1, github_id: -1, username: 'admin', avatar_url: null });
+      }
+      return Response.json({ error: 'not mocked' }, { status: 500 });
+    });
+
+    const res = await worker.fetch(
+      makeRequest(`/api/auth/me?auth_token=${token}`, {
+        headers: { Origin: FRONTEND_ORIGIN },
+      }),
+      makeEnv({
+        FRONTEND_URL: FRONTEND_ORIGIN,
+        ADMIN_PASSWORD_HASH: PASSWORD_HASH,
+        userDbStub,
+      })
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('冒号过多（形状非法）的 Bearer 令牌不被接受', async () => {
+    const worker = await loadWorker();
+    const res = await worker.fetch(
+      makeRequest('/api/auth/me', {
+        headers: { Authorization: 'Bearer 12345678:abcdef:0123456789:extra' },
+      }),
       makeEnv({ userDbStub: makeSessionUserDbStub() })
     );
     expect(res.status).toBe(401);

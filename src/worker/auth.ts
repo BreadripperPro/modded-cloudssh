@@ -290,10 +290,11 @@ function extractSessionToken(request: Request, env: Env): string | null {
 
   const authHeader = request.headers.get('Authorization');
   if (authHeader) {
-    // 会话令牌含 ':' 分隔符（id:fp8:hex），因此字符集需包含冒号
-    const match = /^Bearer\s+([A-Za-z0-9._~+/=-]{0,8}:[A-Za-z0-9._~+/=-]{0,256})$/i.exec(
-      authHeader.trim()
-    );
+    // 会话令牌含 ':' 分隔符：GitHub 模式 `id:hex`、密码模式 `-1:fp8:hex`（**两处**冒号）。
+    // 这里只做「字符集 + 长度」的粗筛，真正的形状校验统一交给 isPlausibleSessionToken，
+    // 避免两处口径漂移——此前本正则只允许一个冒号，导致密码模式的会话令牌
+    // 无法通过 Bearer 通道认证（独立部署的外部前端在浏览器屏蔽第三方 Cookie 时必现）。
+    const match = /^Bearer\s+([A-Za-z0-9._~+/=:-]{1,256})$/i.exec(authHeader.trim());
     if (match && isPlausibleSessionToken(match[1])) return match[1];
   }
 
